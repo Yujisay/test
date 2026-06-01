@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-brand-light text-brand-dark selection:bg-brand-secondary selection:text-brand-dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#FDFCFB">
+  <title>Study Hub WiFi Captive Portal</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              primary: '#535C3B',
+              secondary: '#E5D3B3',
+              accent: '#C8A374',
+              neutral: '#707070',
+              dark: '#373737',
+              light: '#FDFCFB',
+              surface: '#FFFFFF',
+              border: '#E8E2D9',
+            }
+          },
+          boxShadow: {
+            'soft': '0 4px 20px rgba(0, 0, 0, 0.05)',
+            'brand-glow': '0 0 20px rgba(83, 92, 59, 0.1)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    window.onerror = function(msg, url, line, col, error) {
+      const debugDiv = document.getElementById('debugStatus');
+      if (debugDiv) {
+        debugDiv.classList.remove('hidden');
+        debugDiv.innerHTML = `⚠️ Error: ${msg} (Line: ${line})`;
+      }
+      return false;
+    };
+  </script>
+
+  <!-- Firebase Compat SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body class="min-h-full font-['Inter'] antialiased flex flex-col justify-between overflow-x-hidden relative bg-brand-light">
+
+  <!-- Debug Bar -->
+  <div id="debugStatus" class="fixed top-0 left-0 right-0 bg-rose-600 text-white text-[10px] py-1 px-4 z-[9999] hidden text-center font-bold">
+    System Loading...
+  </div>
+
+  <!-- Background Glows -->
+  <div class="fixed -top-40 -left-40 w-96 h-96 bg-brand-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
+  <div class="fixed top-1/3 -right-40 w-96 h-96 bg-brand-secondary/20 rounded-full blur-[100px] pointer-events-none"></div>
+  <div class="fixed -bottom-40 left-1/3 w-[500px] h-[500px] bg-brand-accent/5 rounded-full blur-[120px] pointer-events-none"></div>
+
+  <!-- Header -->
+  <header class="w-full border-b border-brand-border bg-brand-surface/80 backdrop-blur-md sticky top-0 z-30 transition-all duration-300">
+    <div class="max-w-md mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-12 h-12 brand-logo-container">
+          <img src="/img/logo.jpg" alt="Study Hub Logo" class="brand-logo-image">
+        </div>
+        <div>
+          <h1 class="text-lg font-extrabold font-['Outfit'] tracking-tight text-brand-primary">STUDY HUB WiFi</h1>
+          <p class="text-[10px] text-brand-neutral flex items-center">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+            Portal Connected
+          </p>
+        </div>
+      </div>
+      <button id="btnBackToUser"
+        class="hidden px-3 h-9 text-xs font-semibold rounded-lg bg-brand-light border border-brand-border hover:bg-brand-secondary/20 transition-colors flex items-center gap-1.5">
+        <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+        Exit Admin
+      </button>
+    </div>
+  </header>
+
+  <!-- Public Client View -->
+  <main id="publicClientView" class="flex-1 w-full max-w-md mx-auto px-4 py-6 z-20 flex flex-col justify-start">
+
+    <!-- Tab Controls -->
+    <div class="grid grid-cols-2 gap-2 p-1 bg-brand-secondary/30 border border-brand-border rounded-2xl mb-6 backdrop-blur-md">
+      <button id="tabAvail"
+        class="py-3 px-4 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-300 bg-brand-primary text-white shadow-soft font-['Outfit']">
+        <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+        Avail WiFi
+      </button>
+      <button id="tabCheck"
+        class="py-3 px-4 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-300 text-brand-neutral hover:text-brand-dark">
+        <i data-lucide="clock" class="w-4 h-4"></i>
+        Check Session
+      </button>
+    </div>
+
+    <div class="flex-1">
+
+      <!-- TAB A: AVAIL WIFI -->
+      <section id="sectionAvail" class="space-y-5 animate-fade-in">
+
+        <div id="stepErrorMessage" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-semibold text-center">
+          Please fill in all fields.
+        </div>
+
+        <!-- Full Name -->
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block" for="fullName">Full Name</label>
+          <div class="relative rounded-xl shadow-sm">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-brand-neutral">
+              <i data-lucide="user" class="w-4 h-4"></i>
+            </div>
+            <input type="text" id="fullName" required
+              class="block w-full pl-10 pr-4 py-3 bg-brand-surface border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary placeholder-brand-neutral/40 text-sm transition-all"
+              placeholder="Enter your full name">
+          </div>
+        </div>
+
+        <!-- Seat Type -->
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block" for="seatTypeSelect">Seat Type</label>
+          <div class="relative rounded-xl shadow-sm">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-brand-neutral">
+              <i data-lucide="armchair" class="w-4 h-4"></i>
+            </div>
+            <select id="seatTypeSelect"
+              class="block w-full pl-10 pr-10 py-3 bg-brand-surface border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark appearance-none cursor-pointer transition-all">
+              <option value="">Select a seat type...</option>
+              <option value="Table">&#x1FA91; Table &mdash; Perfect for solo study</option>
+              <option value="Cubicle">&#x1F9D1;&#x200D;&#x1F4BB; Cubicle &mdash; Premium focused space</option>
+            </select>
+            <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-brand-neutral">
+              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Duration -->
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block" for="durationSelect">Duration</label>
+          <div class="relative rounded-xl shadow-sm">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-brand-neutral">
+              <i data-lucide="clock" class="w-4 h-4"></i>
+            </div>
+            <select id="durationSelect"
+              class="block w-full pl-10 pr-10 py-3 bg-brand-surface border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark appearance-none cursor-pointer transition-all">
+              <option value="">Select duration...</option>
+              <option value="1 Hour">1 Hour</option>
+              <option value="3+1 Hours">3+1 Hours (4 hrs total)</option>
+              <option value="Open Time">Open Time &mdash; Pay by usage</option>
+              <option value="Custom">Custom Duration</option>
+            </select>
+            <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-brand-neutral">
+              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Hours -->
+        <div id="customDurationWrapper" class="hidden space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block" for="customHours">Number of Hours</label>
+          <div class="relative rounded-xl shadow-sm">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-brand-neutral">
+              <i data-lucide="hash" class="w-4 h-4"></i>
+            </div>
+            <input type="number" id="customHours" min="1" max="12" step="1"
+              class="block w-full pl-10 pr-16 py-3 bg-brand-surface border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary placeholder-brand-neutral/40 text-sm transition-all"
+              placeholder="e.g. 2">
+            <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+              <span class="text-xs text-brand-neutral font-semibold">hrs</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Price Preview Card -->
+        <div id="pricePreviewCard" class="hidden bg-brand-surface border border-brand-border rounded-3xl p-5 shadow-soft space-y-3 animate-fade-in">
+          <div class="flex items-center justify-between border-b border-brand-border pb-3 mb-1">
+            <h3 class="font-bold font-['Outfit'] text-brand-dark text-sm">Session Preview</h3>
+            <span id="previewDate" class="text-[10px] text-brand-neutral uppercase font-bold"></span>
+          </div>
+          <div class="space-y-2.5">
+            <div class="flex justify-between text-sm">
+              <span class="text-brand-neutral">Seat Type</span>
+              <span id="previewSeat" class="font-semibold text-brand-dark">--</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-brand-neutral">Duration</span>
+              <span id="previewDuration" class="font-semibold text-brand-dark">--</span>
+            </div>
+            <div class="flex justify-between items-center pt-2 border-t border-brand-border">
+              <span class="text-brand-neutral text-sm">Total</span>
+              <span id="previewPrice" class="text-xl font-black font-['Outfit'] text-brand-primary">&#8369;0.00</span>
+            </div>
+          </div>
+          <div id="openTimeNote" class="hidden text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 flex items-start gap-2">
+            <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
+            <span>Open Time billing is calculated at session end based on actual hours used. Rate shown is per hour.</span>
+          </div>
+          <div class="grid grid-cols-2 gap-3 pt-1">
+            <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+              <span class="text-[9px] text-brand-neutral uppercase block mb-1">Start Time</span>
+              <span id="previewStart" class="text-sm font-bold text-brand-dark font-mono">--:--</span>
+            </div>
+            <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+              <span class="text-[9px] text-brand-neutral uppercase block mb-1">End Time</span>
+              <span id="previewEnd" class="text-sm font-bold text-brand-dark font-mono">--:--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Payment Method -->
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block">Payment Method</label>
+          <div class="grid grid-cols-2 gap-3">
+            <button id="payMethodCash" type="button"
+              class="pay-method-btn py-3 px-4 rounded-xl border-2 border-brand-primary bg-brand-primary/10 text-brand-primary font-bold text-sm font-['Outfit'] flex items-center justify-center gap-2 transition-all">
+              <i data-lucide="banknote" class="w-4 h-4"></i>
+              Cash
+            </button>
+            <button id="payMethodOnline" type="button"
+              class="pay-method-btn py-3 px-4 rounded-xl border-2 border-brand-border bg-brand-surface text-brand-neutral font-bold text-sm font-['Outfit'] flex items-center justify-center gap-2 transition-all hover:border-brand-primary/40">
+              <i data-lucide="credit-card" class="w-4 h-4"></i>
+              Online
+            </button>
+          </div>
+          <p id="onlinePayNote" class="hidden text-[11px] text-brand-neutral leading-relaxed pt-1 px-1">
+            You'll be redirected to a secure Xendit payment page. Supports GCash, Maya, credit/debit cards, and bank transfers.
+          </p>
+        </div>
+
+        <!-- Confirm Button -->
+        <button id="btnConfirmBooking"
+          class="w-full py-4 px-6 rounded-2xl font-bold font-['Outfit'] tracking-wide text-sm bg-brand-primary hover:bg-brand-primary/90 text-white shadow-soft flex items-center justify-center gap-2 transform active:scale-[0.98] transition-all">
+          <i data-lucide="check-circle" class="w-4 h-4"></i>
+          <span id="btnConfirmLabel">Confirm &amp; Book</span>
+        </button>
+      </section>
+
+      <!-- TAB B: CHECK SESSION -->
+      <section id="sectionCheck" class="hidden space-y-6 animate-fade-in">
+        <div class="space-y-3">
+          <p class="text-xs text-brand-neutral leading-relaxed text-center">
+            Already purchased? Enter your full name to view your session status.
+          </p>
+          <div class="flex space-x-2">
+            <div class="relative flex-1 rounded-xl shadow-sm">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-brand-neutral">
+                <i data-lucide="search" class="w-4 h-4"></i>
+              </div>
+              <input type="text" id="searchName"
+                class="block w-full pl-10 pr-4 py-3.5 bg-brand-surface border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary placeholder-brand-neutral/40 text-sm transition-all"
+                placeholder="Enter exact Full Name">
+            </div>
+            <button id="btnSearchSession"
+              class="px-5 bg-brand-primary text-white hover:bg-brand-primary/90 transition-all rounded-xl font-semibold text-sm flex items-center gap-1.5">
+              <i data-lucide="search" class="w-4 h-4"></i>
+              Search
+            </button>
+          </div>
+        </div>
+        <div id="checkResultContainer" class="hidden transition-all duration-300"></div>
+        <div id="checkEmptyState" class="py-12 px-4 text-center space-y-3 bg-brand-surface border border-brand-border rounded-2xl shadow-soft">
+          <div class="w-12 h-12 rounded-full bg-brand-light border border-brand-border flex items-center justify-center mx-auto text-brand-neutral">
+            <i data-lucide="database" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-brand-dark">No Query Executed</h4>
+            <p class="text-xs text-brand-neutral max-w-[240px] mx-auto mt-1 leading-relaxed">Submit your full name above to query active records in real time.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Admin Dashboard -->
+  <main id="privateAdminView" class="hidden flex-1 w-full max-w-4xl mx-auto px-4 py-6 z-20 flex flex-col justify-start animate-fade-in">
+
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-brand-border pb-6 mb-6">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary shadow-inner">
+          <i data-lucide="lock" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h2 class="text-2xl font-extrabold font-['Outfit'] text-brand-primary">Admin Operations Terminal</h2>
+          <p class="text-xs text-brand-neutral mt-1">Manage database sessions, authorize cashier sales, and view metrics.</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2 flex-wrap gap-2">
+        <button id="btnRefreshAdmin" class="px-4 py-2.5 text-xs font-semibold rounded-xl bg-brand-surface hover:bg-brand-secondary/20 border border-brand-border flex items-center gap-1.5 transition-all text-brand-dark">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          Refresh Logs
+        </button>
+        <button id="btnArchiveLogs" class="px-4 py-2.5 text-xs font-semibold rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1.5 transition-all text-rose-600">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          Archive Old Sessions
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="p-5 bg-brand-surface border border-brand-border rounded-2xl flex items-center justify-between shadow-soft">
+        <div class="space-y-1">
+          <span class="text-xs font-semibold text-brand-neutral uppercase tracking-wider block">Active Sessions</span>
+          <span id="adminActiveSessions" class="text-3xl font-extrabold font-['Outfit'] block text-emerald-600">0</span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+          <i data-lucide="activity" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <div class="p-5 bg-brand-surface border border-brand-border rounded-2xl flex items-center justify-between shadow-soft">
+        <div class="space-y-1">
+          <span class="text-xs font-semibold text-brand-neutral uppercase tracking-wider block">Daily Earnings</span>
+          <span id="adminDailyEarnings" class="text-3xl font-extrabold font-['Outfit'] block text-brand-primary">₱0.00</span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+          <i data-lucide="banknote" class="w-6 h-6"></i>
+        </div>
+      </div>
+      <div class="p-5 bg-brand-surface border border-brand-border rounded-2xl flex items-center justify-between shadow-soft">
+        <div class="space-y-1">
+          <span class="text-xs font-semibold text-brand-neutral uppercase tracking-wider block">Pending Approvals</span>
+          <span id="adminPendingPayments" class="text-3xl font-extrabold font-['Outfit'] block text-amber-600 animate-pulse">0</span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
+          <i data-lucide="clock" class="w-6 h-6"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="bg-brand-surface border border-brand-border rounded-2xl flex flex-col flex-1 overflow-hidden min-h-[400px] shadow-soft">
+      <div class="p-4 border-b border-brand-border flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div class="relative rounded-xl max-w-sm flex-1">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-brand-neutral">
+            <i data-lucide="filter" class="w-3.5 h-3.5"></i>
+          </div>
+          <input type="text" id="adminTableFilter"
+            class="block w-full pl-9 pr-4 py-2 bg-brand-light border border-brand-border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-primary placeholder-brand-neutral/40 transition-all text-brand-dark"
+            placeholder="Filter by Ref Number, Name, Status...">
+        </div>
+        <select id="adminStatusSelector" class="bg-brand-light border border-brand-border rounded-lg text-xs px-3 py-2 text-brand-dark focus:outline-none">
+          <option value="ALL">All Statuses</option>
+          <option value="ACTIVE">Active Sessions</option>
+          <option value="PENDING">Pending Payments</option>
+          <option value="EXPIRED">Expired Sessions</option>
+        </select>
+      </div>
+
+      <!-- Desktop Table (md+) -->
+      <div class="hidden md:block flex-1 overflow-x-auto relative">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="sticky top-0 bg-brand-light text-brand-neutral uppercase tracking-wider font-semibold border-b border-brand-border select-none">
+            <tr>
+              <th class="py-3 px-4">Ref Number</th>
+              <th class="py-3 px-4">Customer Name</th>
+              <th class="py-3 px-4">Seat Type</th>
+              <th class="py-3 px-4">Duration</th>
+              <th class="py-3 px-4">Amount</th>
+              <th class="py-3 px-4">WiFi Status</th>
+              <th class="py-3 px-4">Start / End</th>
+              <th class="py-3 px-4 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="adminTableBody" class="divide-y divide-brand-border">
+            <tr>
+              <td colspan="8" class="text-center py-12 text-brand-neutral">
+                <div class="flex flex-col items-center justify-center space-y-2">
+                  <i data-lucide="loader-2" class="w-5 h-5 animate-spin text-brand-primary"></i>
+                  <span>Connecting to database server...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile Cards (< md) -->
+      <div id="adminCardBody" class="md:hidden flex-1 overflow-y-auto divide-y divide-brand-border">
+        <div class="flex flex-col items-center justify-center space-y-2 py-12 text-brand-neutral text-xs">
+          <i data-lucide="loader-2" class="w-5 h-5 animate-spin text-brand-primary"></i>
+          <span>Connecting to database server...</span>
+        </div>
+      </div>
+
+      <!-- Pagination Footer -->
+      <div class="p-3 border-t border-brand-border bg-brand-light flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px]">
+        <div class="flex items-center gap-3">
+          <span id="adminTableCount" class="text-brand-neutral">Showing 0 rows</span>
+          <span id="adminTablePageInfo" class="text-brand-neutral hidden">— Page <span id="adminCurrentPage">1</span> of <span id="adminTotalPages">1</span></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnPagePrev" class="px-3 py-1.5 rounded-lg border border-brand-border bg-brand-surface text-brand-dark font-semibold hover:bg-brand-secondary/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1" disabled>
+            <i data-lucide="chevron-left" class="w-3 h-3"></i> Prev
+          </button>
+          <button id="btnPageNext" class="px-3 py-1.5 rounded-lg border border-brand-border bg-brand-surface text-brand-dark font-semibold hover:bg-brand-secondary/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1" disabled>
+            Next <i data-lucide="chevron-right" class="w-3 h-3"></i>
+          </button>
+          <div class="flex items-center space-x-1.5 font-semibold text-brand-dark ml-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span>Firebase Connected</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="w-full border-t border-brand-border py-4 bg-brand-surface/40 backdrop-blur-sm select-none z-40 relative">
+    <div class="max-w-md mx-auto px-4 flex justify-between items-center">
+      <div class="text-[10px] text-brand-neutral font-medium">
+        <span>© 2026 Study Hub Captive Portal</span>
+      </div>
+      <button id="adminTriggerIcon" class="p-2 text-brand-neutral/60 hover:text-brand-primary transition-all duration-300 rounded-lg cursor-pointer focus:outline-none">
+        <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+  </footer>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="fixed inset-0 bg-brand-light/80 backdrop-blur-sm z-50 flex items-center justify-center flex-col space-y-4 hidden animate-fade-in select-none">
+    <div class="relative w-16 h-16">
+      <div class="absolute inset-0 rounded-full border-4 border-brand-primary/10"></div>
+      <div class="absolute inset-0 rounded-full border-4 border-t-brand-primary border-r-brand-primary/60 border-l-brand-primary/10 animate-spin"></div>
+    </div>
+    <div class="text-center space-y-1">
+      <h3 id="loadingTitle" class="text-sm font-bold tracking-wide text-brand-dark font-['Outfit']">Processing Request</h3>
+      <p id="loadingMsg" class="text-xs text-brand-neutral max-w-[240px] mx-auto leading-relaxed">Talking to database systems, please wait...</p>
+    </div>
+  </div>
+
+  <!-- Admin Auth Modal -->
+  <div id="adminAuthModal" class="fixed inset-0 bg-brand-dark/20 backdrop-blur-md z-40 flex items-center justify-center hidden animate-fade-in">
+    <div class="bg-brand-surface border border-brand-border p-6 rounded-2xl shadow-soft w-[320px] space-y-4">
+      <div class="flex items-center space-x-3 text-brand-primary border-b border-brand-border pb-3">
+        <div class="w-9 h-9 rounded-lg bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+          <i data-lucide="shield-check" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-sm text-brand-dark font-['Outfit']">Security Authentication</h3>
+          <span class="text-[10px] text-brand-neutral uppercase tracking-wider font-semibold">Access restricted</span>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <label class="text-[10px] font-semibold text-brand-neutral uppercase tracking-wider block" for="adminPassword">Master Password</label>
+        <input type="password" id="adminPassword"
+          class="block w-full px-3 py-2.5 bg-brand-light border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-center tracking-widest text-brand-dark"
+          placeholder="••••••••">
+        <p id="adminAuthError" class="text-[10px] text-rose-600 hidden font-medium">Incorrect master credentials. Access Denied.</p>
+      </div>
+      <div class="grid grid-cols-2 gap-2 pt-2">
+        <button id="btnCancelAdminAuth" class="py-2.5 px-3 rounded-lg text-xs font-semibold border border-brand-border text-brand-neutral hover:text-brand-dark hover:bg-brand-light transition-colors">Cancel</button>
+        <button id="btnSubmitAdminAuth" class="py-2.5 px-3 rounded-lg text-xs font-semibold bg-brand-primary hover:bg-brand-primary/90 text-white transition-colors shadow-sm">Authenticate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ticket Modal -->
+  <div id="ticketModal" class="fixed inset-0 bg-brand-dark/20 backdrop-blur-md z-40 flex items-center justify-center hidden animate-fade-in">
+    <div class="bg-brand-surface border border-brand-border rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl mx-4 relative select-none">
+      <div class="bg-brand-primary p-5 text-center text-white relative">
+        <div class="absolute top-4 right-4">
+          <button id="btnCloseTicket" class="w-7 h-7 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
+            <i data-lucide="x" class="w-4 h-4 text-white"></i>
+          </button>
+        </div>
+        <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-2 text-white shadow-inner">
+          <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+        </div>
+        <h3 class="text-base font-extrabold font-['Outfit']">Ticket Generated</h3>
+        <p class="text-xs text-brand-secondary mt-0.5">Please show this ticket to the cashier.</p>
+      </div>
+      <div class="bg-brand-surface p-6 space-y-5 border-b border-dashed border-brand-border relative">
+        <div class="text-center py-4 bg-brand-light rounded-2xl border border-brand-border">
+          <span class="text-[10px] font-semibold text-brand-neutral uppercase tracking-widest block">Reference Number</span>
+          <span id="ticketRef" class="text-2xl font-extrabold font-['Outfit'] text-brand-primary tracking-wider block mt-1">SH-XXXX</span>
+        </div>
+        <div class="grid grid-cols-2 gap-4 text-xs">
+          <div><span class="text-brand-neutral block">Customer</span><strong id="ticketName" class="text-brand-dark block truncate mt-0.5">—</strong></div>
+          <div><span class="text-brand-neutral block">Access Hours</span><strong id="ticketHours" class="text-brand-dark block mt-0.5">—</strong></div>
+          <div><span class="text-brand-neutral block">Total Paid</span><strong id="ticketAmount" class="text-brand-primary block mt-0.5 font-['Outfit'] font-bold text-sm">₱0.00</strong></div>
+          <div><span class="text-brand-neutral block">Checkout Method</span><strong id="ticketMethod" class="text-brand-dark block mt-0.5 uppercase tracking-wide text-[10px] bg-brand-secondary/40 px-2 py-0.5 rounded border border-brand-border w-max">Cashier</strong></div>
+        </div>
+        <div class="p-3.5 bg-brand-light border border-brand-border rounded-xl flex items-start space-x-2 text-xs">
+          <div class="mt-0.5 text-brand-primary"><i data-lucide="info" class="w-3.5 h-3.5"></i></div>
+          <p id="ticketInstructions" class="text-brand-neutral leading-normal">Proceed to the Study Hub cashier desk and present this Reference Number.</p>
+        </div>
+      </div>
+      <!-- Ticket punches -->
+      <div class="absolute left-0 top-[228px] w-4 h-8 bg-brand-light rounded-r-full -translate-x-1/2 pointer-events-none border-r border-brand-border"></div>
+      <div class="absolute right-0 top-[228px] w-4 h-8 bg-brand-light rounded-l-full translate-x-1/2 pointer-events-none border-l border-brand-border"></div>
+      <div class="p-6 bg-brand-surface text-center space-y-4">
+        <div class="flex flex-col items-center justify-center opacity-65">
+          <div class="flex items-center space-x-[2px] h-7 bg-brand-dark px-3 py-1 rounded text-white">
+            <div class="w-0.5 h-full bg-white"></div><div class="w-1.5 h-full bg-white"></div>
+            <div class="w-0.5 h-full bg-white"></div><div class="w-[1px] h-full bg-white"></div>
+            <div class="w-1 h-full bg-white"></div><div class="w-0.5 h-full bg-white"></div>
+            <div class="w-[1px] h-full bg-white"></div><div class="w-1.5 h-full bg-white"></div>
+            <div class="w-0.5 h-full bg-white"></div><div class="w-1 h-full bg-white"></div>
+            <div class="w-0.5 h-full bg-white"></div><div class="w-1 h-full bg-white"></div>
+            <div class="w-0.5 h-full bg-white"></div><div class="w-1.5 h-full bg-white"></div>
+          </div>
+          <span class="text-[9px] font-mono tracking-widest text-brand-neutral mt-1 select-none uppercase">STUDY-HUB-SECURE-TICKET</span>
+        </div>
+        <button id="btnDoneTicket" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all select-none">
+          Done & Close Ticket
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compiled Application JS -->
+  <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Failed — Study Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: { primary: '#535C3B', secondary: '#E5D3B3', accent: '#C8A374', neutral: '#707070', dark: '#373737', light: '#FDFCFB', surface: '#FFFFFF', border: '#E8E2D9' } } } }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="min-h-screen bg-brand-light font-['Inter'] flex items-center justify-center px-4">
+  <div class="w-full max-w-sm text-center space-y-6">
+    <div class="w-20 h-20 rounded-full bg-rose-100 border-4 border-rose-200 flex items-center justify-center mx-auto">
+      <i data-lucide="x-circle" class="w-10 h-10 text-rose-500"></i>
+    </div>
+    <div>
+      <h1 class="text-2xl font-extrabold font-['Outfit'] text-brand-dark">Payment Cancelled</h1>
+      <p class="text-sm text-brand-neutral mt-2 leading-relaxed">Your payment was not completed. No charge was made. You can try again or pay at the cashier instead.</p>
+    </div>
+    <div class="bg-brand-surface border border-brand-border rounded-2xl p-4 text-sm text-left space-y-2">
+      <div class="flex justify-between">
+        <span class="text-brand-neutral">Reference No.</span>
+        <span id="refNum" class="font-mono font-bold text-brand-dark">—</span>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <a href="/" class="block py-3.5 rounded-2xl border border-brand-border bg-brand-surface text-brand-dark font-bold font-['Outfit'] text-sm hover:bg-brand-secondary/20 transition-all">Go Back</a>
+      <a href="/" class="block py-3.5 rounded-2xl bg-brand-primary text-white font-bold font-['Outfit'] text-sm hover:bg-brand-primary/90 transition-all">Try Again</a>
+    </div>
+  </div>
+  <script>
+    if (window.lucide) lucide.createIcons();
+    window.addEventListener('load', () => { if (window.lucide) lucide.createIcons(); });
+    const params = new URLSearchParams(window.location.search);
+    document.getElementById('refNum').textContent = params.get('ref') || '—';
+  </script>
+</body>
+</html>

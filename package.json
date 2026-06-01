@@ -1,0 +1,24 @@
+{
+  "name": "studyhub-wifi-portal",
+  "version": "1.0.0",
+  "description": "Study Hub WiFi Captive Portal with Xendit payment integration",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser",
+    "start": "npm run build && ts-node server.ts",
+    "dev": "concurrently \"esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser --watch\" \"nodemon --exec ts-node server.ts --watch server.ts\""
+  },
+  "dependencies": {
+    "axios": "^1.16.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.29",
+    "concurrently": "^9.1.2",
+    "esbuild": "^0.25.12",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
