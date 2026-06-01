@@ -312,6 +312,10 @@
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
           Refresh Logs
         </button>
+        <button id="btnSalesReport" class="px-4 py-2.5 text-xs font-semibold rounded-xl bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/30 flex items-center gap-1.5 transition-all text-brand-primary">
+          <i data-lucide="file-bar-chart" class="w-3.5 h-3.5"></i>
+          Sales Report
+        </button>
         <button id="btnArchiveLogs" class="px-4 py-2.5 text-xs font-semibold rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1.5 transition-all text-rose-600">
           <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
           Archive Old Sessions
@@ -364,8 +368,9 @@
         <select id="adminStatusSelector" class="bg-brand-light border border-brand-border rounded-lg text-xs px-3 py-2 text-brand-dark focus:outline-none">
           <option value="ALL">All Statuses</option>
           <option value="ACTIVE">Active Sessions</option>
-          <option value="PENDING">Pending Payments</option>
-          <option value="EXPIRED">Expired Sessions</option>
+          <option value="PENDING">Pending Approval</option>
+          <option value="AWAITING">Awaiting Payment</option>
+          <option value="EXPIRED">Expired / Completed</option>
         </select>
       </div>
 
@@ -532,6 +537,45 @@
         </button>
         <button id="btnDoneTicket" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all select-none">
           Done &amp; View My Session
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sales Report Modal -->
+  <div id="salesReportModal" class="fixed inset-0 bg-brand-dark/20 backdrop-blur-md z-40 flex items-center justify-center hidden animate-fade-in">
+    <div class="bg-brand-surface border border-brand-border rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl mx-4">
+      <div class="bg-brand-primary p-5 text-white relative">
+        <div class="absolute top-4 right-4">
+          <button id="btnCloseSalesReport" class="w-7 h-7 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
+            <i data-lucide="x" class="w-4 h-4 text-white"></i>
+          </button>
+        </div>
+        <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-3">
+          <i data-lucide="file-bar-chart" class="w-6 h-6"></i>
+        </div>
+        <h3 class="text-base font-extrabold font-['Outfit'] text-center">Sales Report</h3>
+        <p class="text-xs text-brand-secondary text-center mt-0.5">Select a date range to generate a PDF report.</p>
+      </div>
+      <div class="p-6 space-y-5">
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block">Start Date</label>
+          <input type="date" id="reportStartDate"
+            class="block w-full px-4 py-3 bg-brand-light border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark transition-all">
+        </div>
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block">End Date</label>
+          <input type="date" id="reportEndDate"
+            class="block w-full px-4 py-3 bg-brand-light border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark transition-all">
+        </div>
+        <div class="p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-2 text-xs text-amber-700">
+          <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
+          <span>A print dialog will open. Choose "Save as PDF" to download the report.</span>
+        </div>
+        <button id="btnDownloadSalesReport"
+          class="w-full py-3.5 px-4 rounded-2xl font-bold font-['Outfit'] text-sm bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          Generate &amp; Download PDF
         </button>
       </div>
     </div>

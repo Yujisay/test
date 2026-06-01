@@ -872,6 +872,12 @@ Please proceed to the cashier desk to complete your payment.`);
         actionHtml = `<button data-ref="${row.referenceNumber}" class="btn-approve-session px-3 py-1 bg-brand-primary text-white rounded text-[10px] font-semibold">Approve</button>`;
       } else if (row.status === "ACTIVE") {
         actionHtml = `<button data-ref="${row.referenceNumber}" class="btn-end-session px-3 py-1 bg-rose-500 text-white rounded text-[10px] font-semibold">${isOpenTime ? "End & Bill" : "End"}</button>`;
+      } else if (row.status === "AWAITING PAYMENT") {
+        actionHtml = `
+        <div class="flex flex-col gap-1">
+          <button data-ref="${row.referenceNumber}" class="btn-mark-paid px-3 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold whitespace-nowrap">Mark Paid</button>
+          <button data-ref="${row.referenceNumber}" class="btn-cancel-awaiting px-3 py-1 bg-rose-100 text-rose-600 border border-rose-200 rounded text-[10px] font-semibold whitespace-nowrap">Cancel</button>
+        </div>`;
       }
       const statusColor = row.status === "ACTIVE" ? "text-emerald-700 bg-emerald-50 border-emerald-200" : row.status === "PENDING SESSION" ? "text-amber-700 bg-amber-50 border-amber-200" : row.status === "AWAITING PAYMENT" ? "text-blue-700 bg-blue-50 border-blue-200" : "text-brand-neutral bg-brand-light border-brand-border";
       const tr = document.createElement("tr");
@@ -915,7 +921,7 @@ Please proceed to the cashier desk to complete your payment.`);
           <span class="font-semibold text-brand-dark text-[10px]">${row.startTime} \u2013 ${row.endTime}</span>
         </div>
       </div>
-      ${actionHtml ? `<div class="pt-1">${actionHtml.replace("rounded text-[10px]", "rounded-lg text-xs w-full py-2")}</div>` : ""}
+      ${actionHtml ? `<div class="pt-1 flex flex-col gap-2">${actionHtml}</div>` : ""}
     `;
       cardBody.appendChild(card);
     });
@@ -949,7 +955,7 @@ Please proceed to the cashier desk to complete your payment.`);
     const status = document.getElementById("adminStatusSelector").value;
     const filtered = adminState.recordsCache.filter((r) => {
       const matchesQuery = r.fullName.toLowerCase().includes(query) || r.referenceNumber.toLowerCase().includes(query);
-      const matchesStatus = status === "ALL" || status === "ACTIVE" && r.status === "ACTIVE" || status === "PENDING" && r.status === "PENDING SESSION" || status === "EXPIRED" && r.status === "EXPIRED";
+      const matchesStatus = status === "ALL" || status === "ACTIVE" && r.status === "ACTIVE" || status === "PENDING" && r.status === "PENDING SESSION" || status === "EXPIRED" && r.status === "EXPIRED" || status === "AWAITING" && r.status === "AWAITING PAYMENT";
       return matchesQuery && matchesStatus;
     });
     filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -961,6 +967,28 @@ Please proceed to the cashier desk to complete your payment.`);
     const db2 = getDb();
     if (confirm("Approve session " + refNum + "?") && db2) {
       await db2.ref("sessions/" + refNum).update({ status: "ACTIVE" });
+    }
+  }
+  async function markAwaitingAsPaid(refNum) {
+    const db2 = getDb();
+    if (!db2) return;
+    if (confirm(`Mark session ${refNum} as paid and move to PENDING SESSION?
+
+Use this if the customer has paid but the online payment gateway did not automatically update.`)) {
+      await db2.ref("sessions/" + refNum).update({
+        status: "PENDING SESSION",
+        paymentConfirmed: true,
+        paidAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+  }
+  async function cancelAwaitingPayment(refNum) {
+    const db2 = getDb();
+    if (!db2) return;
+    if (confirm(`Cancel and remove session ${refNum}?
+
+This will delete the unpaid booking. The customer can create a new booking.`)) {
+      await db2.ref("sessions/" + refNum).remove();
     }
   }
   async function endSession(refNum) {
@@ -1031,6 +1059,242 @@ This permanently removes them from the database.`)) return;
     document.getElementById("adminActiveSessions").innerText = String(active);
     document.getElementById("adminDailyEarnings").innerText = `\u20B1${earnings.toFixed(2)}`;
     document.getElementById("adminPendingPayments").innerText = String(pending);
+  }
+  function openSalesReportModal() {
+    const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    const firstOfMonth = new Date((/* @__PURE__ */ new Date()).getFullYear(), (/* @__PURE__ */ new Date()).getMonth(), 1).toISOString().split("T")[0];
+    const startInput = document.getElementById("reportStartDate");
+    const endInput = document.getElementById("reportEndDate");
+    if (startInput) startInput.value = firstOfMonth;
+    if (endInput) endInput.value = today;
+    document.getElementById("salesReportModal").classList.remove("hidden");
+  }
+  function closeSalesReportModal() {
+    document.getElementById("salesReportModal").classList.add("hidden");
+  }
+  function downloadSalesReport() {
+    const startVal = document.getElementById("reportStartDate").value;
+    const endVal = document.getElementById("reportEndDate").value;
+    if (!startVal || !endVal) {
+      alert("Please select both a start and end date.");
+      return;
+    }
+    const startDate = /* @__PURE__ */ new Date(startVal + "T00:00:00");
+    const endDate = /* @__PURE__ */ new Date(endVal + "T23:59:59");
+    if (startDate > endDate) {
+      alert("Start date must be before end date.");
+      return;
+    }
+    const allRecords = adminState.recordsCache;
+    const filtered = allRecords.filter((r) => {
+      const ts = new Date(r.timestamp);
+      return ts >= startDate && ts <= endDate;
+    });
+    const completedSessions = filtered.filter((r) => r.status === "EXPIRED");
+    const totalRevenue = completedSessions.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const activeSessions = filtered.filter((r) => r.status === "ACTIVE").length;
+    const pendingSessions = filtered.filter((r) => r.status === "PENDING SESSION").length;
+    const awaitingSessions = filtered.filter((r) => r.status === "AWAITING PAYMENT").length;
+    const byType = {};
+    completedSessions.forEach((r) => {
+      if (!byType[r.seatType]) byType[r.seatType] = { count: 0, revenue: 0 };
+      byType[r.seatType].count++;
+      byType[r.seatType].revenue += Number(r.amount) || 0;
+    });
+    const byMethod = {};
+    completedSessions.forEach((r) => {
+      const method = r.paymentMethod || "CASH";
+      if (!byMethod[method]) byMethod[method] = { count: 0, revenue: 0 };
+      byMethod[method].count++;
+      byMethod[method].revenue += Number(r.amount) || 0;
+    });
+    const formatDate = (d) => d.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+    const generatedAt = (/* @__PURE__ */ new Date()).toLocaleString("en-PH", { dateStyle: "long", timeStyle: "short" });
+    const typeRows = Object.entries(byType).map(([type, data]) => `
+    <tr>
+      <td>${type}</td>
+      <td style="text-align:center">${data.count}</td>
+      <td style="text-align:right;font-weight:700;color:#535C3B">\u20B1${data.revenue.toFixed(2)}</td>
+    </tr>`).join("");
+    const methodRows = Object.entries(byMethod).map(([method, data]) => `
+    <tr>
+      <td>${method}</td>
+      <td style="text-align:center">${data.count}</td>
+      <td style="text-align:right;font-weight:700;color:#535C3B">\u20B1${data.revenue.toFixed(2)}</td>
+    </tr>`).join("");
+    const sessionRows = filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((r) => {
+      const statusColor = r.status === "ACTIVE" ? "#059669" : r.status === "PENDING SESSION" ? "#d97706" : r.status === "AWAITING PAYMENT" ? "#2563eb" : "#6b7280";
+      return `
+      <tr>
+        <td style="font-family:monospace;font-weight:700">${r.referenceNumber}</td>
+        <td>${r.fullName}</td>
+        <td>${r.seatType}</td>
+        <td>${r.duration}</td>
+        <td>${r.bookingDate}</td>
+        <td>${r.startTime}</td>
+        <td>${r.paymentMethod || "CASH"}</td>
+        <td style="text-align:right;font-weight:700;color:#535C3B">${r.status === "ACTIVE" ? "(Active)" : "\u20B1" + Number(r.amount).toFixed(2)}</td>
+        <td><span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;color:${statusColor};border:1px solid ${statusColor};white-space:nowrap">${r.status}</span></td>
+      </tr>`;
+    }).join("");
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Sales Report \u2014 Study Hub WiFi</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #373737; background: #fff; }
+    .page { padding: 32px 40px; max-width: 900px; margin: 0 auto; }
+
+    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #535C3B; padding-bottom: 16px; margin-bottom: 24px; }
+    .header-left h1 { font-size: 22px; font-weight: 800; color: #535C3B; letter-spacing: -0.5px; }
+    .header-left p { font-size: 11px; color: #707070; margin-top: 2px; }
+    .header-right { text-align: right; }
+    .header-right .badge { display: inline-block; background: #535C3B; color: #fff; font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; letter-spacing: 1px; }
+    .header-right .generated { font-size: 10px; color: #707070; margin-top: 6px; }
+
+    .date-range { background: #F4F1EC; border: 1px solid #E8E2D9; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; display: flex; align-items: center; gap: 8px; }
+    .date-range span { font-size: 11px; color: #707070; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .date-range strong { font-size: 13px; color: #373737; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+    .kpi-card { background: #FDFCFB; border: 1px solid #E8E2D9; border-radius: 8px; padding: 14px; }
+    .kpi-card .label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; color: #707070; margin-bottom: 4px; }
+    .kpi-card .value { font-size: 22px; font-weight: 800; color: #535C3B; }
+    .kpi-card.revenue .value { color: #535C3B; }
+    .kpi-card.sessions .value { color: #059669; }
+    .kpi-card.pending .value { color: #d97706; }
+    .kpi-card.total .value { color: #373737; }
+
+    .section { margin-bottom: 24px; }
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #707070; border-bottom: 1px solid #E8E2D9; padding-bottom: 6px; margin-bottom: 12px; }
+
+    .breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    thead th { background: #535C3B; color: #fff; text-align: left; padding: 8px 10px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    tbody tr { border-bottom: 1px solid #E8E2D9; }
+    tbody tr:nth-child(even) { background: #FDFCFB; }
+    tbody tr:hover { background: #F4F1EC; }
+    td { padding: 7px 10px; color: #373737; }
+    tfoot td { background: #F4F1EC; font-weight: 700; padding: 8px 10px; border-top: 2px solid #535C3B; }
+
+    .footer { margin-top: 32px; border-top: 1px solid #E8E2D9; padding-top: 12px; text-align: center; color: #707070; font-size: 10px; }
+    .no-records { text-align: center; padding: 24px; color: #707070; font-style: italic; }
+
+    @media print {
+      body { font-size: 11px; }
+      .page { padding: 20px; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="header-left">
+      <h1>STUDY HUB WiFi</h1>
+      <p>Sales & Revenue Report</p>
+    </div>
+    <div class="header-right">
+      <span class="badge">OFFICIAL REPORT</span>
+      <p class="generated">Generated: ${generatedAt}</p>
+    </div>
+  </div>
+
+  <div class="date-range">
+    <span>Period:</span>
+    <strong>${formatDate(startDate)} &nbsp;\u2192&nbsp; ${formatDate(endDate)}</strong>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card revenue">
+      <div class="label">Total Revenue</div>
+      <div class="value">\u20B1${totalRevenue.toFixed(2)}</div>
+    </div>
+    <div class="kpi-card total">
+      <div class="label">Total Bookings</div>
+      <div class="value">${filtered.length}</div>
+    </div>
+    <div class="kpi-card sessions">
+      <div class="label">Completed</div>
+      <div class="value">${completedSessions.length}</div>
+    </div>
+    <div class="kpi-card pending">
+      <div class="label">Pending / Active</div>
+      <div class="value">${pendingSessions + activeSessions}</div>
+    </div>
+  </div>
+
+  <div class="breakdown-grid">
+    <div class="section">
+      <div class="section-title">Revenue by Seat Type</div>
+      ${Object.keys(byType).length > 0 ? `
+      <table>
+        <thead><tr><th>Seat Type</th><th style="text-align:center">Sessions</th><th style="text-align:right">Revenue</th></tr></thead>
+        <tbody>${typeRows}</tbody>
+        <tfoot><tr><td>Total</td><td style="text-align:center">${completedSessions.length}</td><td style="text-align:right">\u20B1${totalRevenue.toFixed(2)}</td></tr></tfoot>
+      </table>` : '<p class="no-records">No completed sessions in range.</p>'}
+    </div>
+
+    <div class="section">
+      <div class="section-title">Revenue by Payment Method</div>
+      ${Object.keys(byMethod).length > 0 ? `
+      <table>
+        <thead><tr><th>Method</th><th style="text-align:center">Sessions</th><th style="text-align:right">Revenue</th></tr></thead>
+        <tbody>${methodRows}</tbody>
+        <tfoot><tr><td>Total</td><td style="text-align:center">${completedSessions.length}</td><td style="text-align:right">\u20B1${totalRevenue.toFixed(2)}</td></tr></tfoot>
+      </table>` : '<p class="no-records">No completed sessions in range.</p>'}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">All Sessions in Period (${filtered.length} records)</div>
+    ${filtered.length > 0 ? `
+    <table>
+      <thead>
+        <tr>
+          <th>Ref #</th>
+          <th>Customer</th>
+          <th>Seat</th>
+          <th>Duration</th>
+          <th>Date</th>
+          <th>Start</th>
+          <th>Payment</th>
+          <th style="text-align:right">Amount</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>${sessionRows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="7">Total Collected Revenue</td>
+          <td style="text-align:right">\u20B1${totalRevenue.toFixed(2)}</td>
+          <td>${completedSessions.length} completed</td>
+        </tr>
+      </tfoot>
+    </table>` : '<p class="no-records">No sessions found for the selected date range.</p>'}
+  </div>
+
+  <div class="footer">
+    Study Hub Captive Portal &nbsp;|&nbsp; Sales Report &nbsp;|&nbsp; ${formatDate(startDate)} to ${formatDate(endDate)}
+  </div>
+
+</div>
+<script>
+  window.onload = function() { window.print(); };
+<\/script>
+</body>
+</html>`;
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    } else {
+      alert("Please allow popups for this site to download the report.");
+    }
   }
 
   // src/main.ts
@@ -1174,6 +1438,19 @@ This permanently removes them from the database.`)) return;
       const refNum = target.getAttribute("data-ref");
       if (refNum && state.dbConnected) endSession(refNum);
     }
+    if (target.classList.contains("btn-mark-paid")) {
+      const refNum = target.getAttribute("data-ref");
+      if (refNum && state.dbConnected) markAwaitingAsPaid(refNum);
+      else if (!state.dbConnected) alert("Database disconnected.");
+    }
+    if (target.classList.contains("btn-cancel-awaiting")) {
+      const refNum = target.getAttribute("data-ref");
+      if (refNum && state.dbConnected) cancelAwaitingPayment(refNum);
+      else if (!state.dbConnected) alert("Database disconnected.");
+    }
+    if (id === "btnSalesReport") openSalesReportModal();
+    if (id === "btnCloseSalesReport") closeSalesReportModal();
+    if (id === "btnDownloadSalesReport") downloadSalesReport();
     if (target.classList.contains("btn-customer-stop-session")) {
       const refNum = target.getAttribute("data-ref");
       if (refNum && state.dbConnected) stopOpenTimeSession(refNum);

@@ -14,7 +14,9 @@ import {
 import {
   handleAdminTrigger, submitAdminAuth, unlockAdminMode, exitAdminMode,
   refreshAdminDashboard, archiveOldSessions, renderCurrentPage,
-  filterAdminLogs, approveTransaction, endSession
+  filterAdminLogs, approveTransaction, endSession,
+  markAwaitingAsPaid, cancelAwaitingPayment,
+  openSalesReportModal, closeSalesReportModal, downloadSalesReport
 } from './admin';
 import { getPageSize } from './config';
 
@@ -165,6 +167,23 @@ function handleGlobalClicks(e: MouseEvent): void {
     const refNum = target.getAttribute('data-ref');
     if (refNum && state.dbConnected) endSession(refNum);
   }
+
+  // Awaiting payment actions
+  if (target.classList.contains('btn-mark-paid')) {
+    const refNum = target.getAttribute('data-ref');
+    if (refNum && state.dbConnected) markAwaitingAsPaid(refNum);
+    else if (!state.dbConnected) alert("Database disconnected.");
+  }
+  if (target.classList.contains('btn-cancel-awaiting')) {
+    const refNum = target.getAttribute('data-ref');
+    if (refNum && state.dbConnected) cancelAwaitingPayment(refNum);
+    else if (!state.dbConnected) alert("Database disconnected.");
+  }
+
+  // Sales report
+  if (id === 'btnSalesReport') openSalesReportModal();
+  if (id === 'btnCloseSalesReport') closeSalesReportModal();
+  if (id === 'btnDownloadSalesReport') downloadSalesReport();
 
   // Customer stop session
   if (target.classList.contains('btn-customer-stop-session')) {
