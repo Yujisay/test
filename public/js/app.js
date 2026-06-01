@@ -72,6 +72,7 @@
   };
 
   // src/ui.ts
+  var currentTicketRecord = null;
   function showLoader(title, msg) {
     document.getElementById("loadingTitle").innerText = title;
     document.getElementById("loadingMsg").innerText = msg;
@@ -113,6 +114,7 @@
     }
   }
   function showTicketModal(record) {
+    currentTicketRecord = record;
     const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
     const isOpenTime = record.duration === "Open Time";
     const amountText = isOpenTime ? `\u20B1${rate.toFixed(2)}/hr` : `\u20B1${Number(record.amount).toFixed(2)}`;
@@ -122,13 +124,138 @@
     document.getElementById("ticketHours").innerText = record.duration;
     document.getElementById("ticketAmount").innerText = amountText;
     document.getElementById("ticketInstructions").innerText = instructions;
+    const methodEl = document.getElementById("ticketMethod");
+    if (methodEl) methodEl.innerText = record.paymentMethod || "CASH";
     document.getElementById("ticketModal").classList.remove("hidden");
   }
   function closeTicketModal() {
     document.getElementById("ticketModal").classList.add("hidden");
+    if (currentTicketRecord) {
+      const name = currentTicketRecord.fullName;
+      currentTicketRecord = null;
+      switchTab("check");
+      const searchInput = document.getElementById("searchName");
+      if (searchInput) {
+        searchInput.value = name;
+        setTimeout(() => {
+          const btnSearch = document.getElementById("btnSearchSession");
+          if (btnSearch) btnSearch.click();
+        }, 150);
+      }
+    }
   }
   function closeAdminAuth() {
     document.getElementById("adminAuthModal").classList.add("hidden");
+  }
+  function downloadReceipt() {
+    const record = currentTicketRecord;
+    if (!record) return;
+    const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+    const isOpenTime = record.duration === "Open Time";
+    const amountText = isOpenTime ? `\u20B1${rate.toFixed(2)}/hr (billed at end)` : `\u20B1${Number(record.amount).toFixed(2)}`;
+    const W = 480;
+    const H = 680;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#535C3B";
+    roundRect(ctx, 0, 0, W, 110, 0);
+    ctx.fill();
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 22px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("STUDY HUB WiFi", W / 2, 48);
+    ctx.font = "13px Arial, sans-serif";
+    ctx.fillStyle = "#E5D3B3";
+    ctx.fillText("Official Booking Receipt", W / 2, 74);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "11px Arial, sans-serif";
+    ctx.fillText((/* @__PURE__ */ new Date()).toLocaleString(), W / 2, 96);
+    ctx.fillStyle = "#F4F1EC";
+    roundRect(ctx, 32, 126, W - 64, 70, 12);
+    ctx.fill();
+    ctx.strokeStyle = "#E8E2D9";
+    ctx.lineWidth = 1;
+    roundRect(ctx, 32, 126, W - 64, 70, 12);
+    ctx.stroke();
+    ctx.fillStyle = "#707070";
+    ctx.font = "10px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("REFERENCE NUMBER", W / 2, 148);
+    ctx.fillStyle = "#535C3B";
+    ctx.font = "bold 30px Arial, monospace";
+    ctx.fillText(record.referenceNumber, W / 2, 183);
+    ctx.strokeStyle = "#E8E2D9";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(32, 214);
+    ctx.lineTo(W - 32, 214);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const details = [
+      ["Customer Name", record.fullName],
+      ["Seat Type", record.seatType],
+      ["Duration", record.duration],
+      ["Date", record.bookingDate],
+      ["Session Time", `${record.startTime} \u2013 ${record.endTime}`],
+      ["Payment Method", record.paymentMethod || "CASH"],
+      ["Amount", amountText],
+      ["Status", record.status]
+    ];
+    ctx.textAlign = "left";
+    let y = 244;
+    details.forEach(([label, value], i) => {
+      if (i % 2 === 0) {
+        ctx.fillStyle = "#FAFAF8";
+        ctx.fillRect(32, y - 14, W - 64, 34);
+      }
+      ctx.fillStyle = "#707070";
+      ctx.font = "11px Arial, sans-serif";
+      ctx.fillText(label, 48, y + 6);
+      ctx.fillStyle = "#373737";
+      ctx.font = label === "Amount" ? "bold 13px Arial, sans-serif" : "12px Arial, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(value, W - 48, y + 6);
+      ctx.textAlign = "left";
+      y += 36;
+    });
+    ctx.fillStyle = "#F4F1EC";
+    ctx.fillRect(0, H - 80, W, 80);
+    ctx.strokeStyle = "#E8E2D9";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, H - 80);
+    ctx.lineTo(W, H - 80);
+    ctx.stroke();
+    ctx.fillStyle = "#707070";
+    ctx.font = "10px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Thank you for visiting Study Hub!", W / 2, H - 50);
+    ctx.fillText("Present this reference number to the cashier.", W / 2, H - 33);
+    ctx.font = "bold 10px Arial, sans-serif";
+    ctx.fillStyle = "#535C3B";
+    ctx.fillText("study-hub-captive-portal", W / 2, H - 14);
+    const link = document.createElement("a");
+    link.download = `StudyHub-Receipt-${record.referenceNumber}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
   }
 
   // src/booking.ts
@@ -158,11 +285,31 @@
       wrapper.classList.toggle("hidden", duration !== "Custom");
     }
     updateFormPreview();
+    updateOnlineNoteVisibility();
+  }
+  function updateOnlineNoteVisibility() {
+    const duration = document.getElementById("durationSelect").value;
+    const onlineNote = document.getElementById("onlinePayNote");
+    const onlineOpenTimeNote = document.getElementById("onlineOpenTimeNote");
+    if (state.paymentMethod === "online") {
+      if (duration === "Open Time") {
+        onlineNote?.classList.add("hidden");
+        onlineOpenTimeNote?.classList.remove("hidden");
+      } else {
+        onlineNote?.classList.remove("hidden");
+        onlineOpenTimeNote?.classList.add("hidden");
+      }
+    } else {
+      onlineNote?.classList.add("hidden");
+      onlineOpenTimeNote?.classList.add("hidden");
+    }
   }
   function updateFormPreview() {
     const seatType = document.getElementById("seatTypeSelect").value;
     const duration = document.getElementById("durationSelect").value;
     const card = document.getElementById("pricePreviewCard");
+    const timeGrid = document.getElementById("previewTimeGrid");
+    const priceLabel = document.getElementById("previewPriceLabel");
     if (!seatType || !duration) {
       card?.classList.add("hidden");
       return;
@@ -199,14 +346,18 @@
     document.getElementById("previewSeat").textContent = seatType;
     document.getElementById("previewDuration").textContent = displayDuration;
     document.getElementById("previewDate").textContent = state.booking.bookingDate;
-    document.getElementById("previewStart").textContent = times.startTime;
-    document.getElementById("previewEnd").textContent = times.endTime;
     if (duration === "Open Time") {
+      if (priceLabel) priceLabel.textContent = "Rate / Hour";
       document.getElementById("previewPrice").textContent = `\u20B1${amount.toFixed(2)}/hr`;
       openTimeNote?.classList.remove("hidden");
+      timeGrid?.classList.add("hidden");
     } else {
+      if (priceLabel) priceLabel.textContent = "Total";
       document.getElementById("previewPrice").textContent = `\u20B1${amount.toFixed(2)}`;
       openTimeNote?.classList.add("hidden");
+      timeGrid?.classList.remove("hidden");
+      document.getElementById("previewStart").textContent = times.startTime;
+      document.getElementById("previewEnd").textContent = times.endTime;
     }
     if (window.lucide) lucide.createIcons();
   }
@@ -214,7 +365,6 @@
     state.paymentMethod = method;
     const cashBtn = document.getElementById("payMethodCash");
     const onlineBtn = document.getElementById("payMethodOnline");
-    const onlineNote = document.getElementById("onlinePayNote");
     const btnLabel = document.getElementById("btnConfirmLabel");
     const active = ["border-brand-primary", "bg-brand-primary/10", "text-brand-primary"];
     const inactive = ["border-brand-border", "bg-brand-surface", "text-brand-neutral"];
@@ -223,16 +373,15 @@
       cashBtn.classList.add(...active);
       onlineBtn.classList.remove(...active);
       onlineBtn.classList.add(...inactive);
-      onlineNote?.classList.add("hidden");
       if (btnLabel) btnLabel.innerHTML = "Confirm &amp; Book";
     } else {
       onlineBtn.classList.remove(...inactive);
       onlineBtn.classList.add(...active);
       cashBtn.classList.remove(...active);
       cashBtn.classList.add(...inactive);
-      onlineNote?.classList.remove("hidden");
       if (btnLabel) btnLabel.textContent = "Pay Online \u2192";
     }
+    updateOnlineNoteVisibility();
   }
   async function initiateCheckout() {
     const fullName = document.getElementById("fullName").value.trim();
@@ -270,10 +419,6 @@
       }
       amount = Math.round(hours * rate * 100) / 100;
     }
-    if (state.paymentMethod === "online" && duration === "Open Time") {
-      showFormError("Online payment is not available for Open Time. Please use Cash or choose a fixed duration.");
-      return;
-    }
     const times = computeSessionTimes(hours, duration);
     const refNumber = Math.random().toString(36).substring(2, 10).toUpperCase();
     const durationLabel = duration === "Custom" ? `${hours} Hour${hours !== 1 ? "s" : ""} (Custom)` : duration;
@@ -290,7 +435,7 @@
       status: "PENDING SESSION",
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     };
-    if (state.paymentMethod === "online") {
+    if (state.paymentMethod === "online" && duration !== "Open Time") {
       await initiateOnlinePayment(sessionData);
     } else {
       await initiateCashCheckout(sessionData);
@@ -300,17 +445,17 @@
     const db2 = getDb();
     try {
       showLoader("Processing...", "Creating your WiFi session...");
-      const data = { ...sessionData, status: "PENDING SESSION", paymentMethod: "CASH" };
+      const payMethod = state.paymentMethod === "online" ? "ONLINE" : "CASH";
+      const data = { ...sessionData, status: "PENDING SESSION", paymentMethod: payMethod };
       if (db2) {
         await db2.ref("sessions/" + data.referenceNumber).set(data);
+        hideLoader();
         showTicketModal(data);
-        resetBookingState();
       }
     } catch (error) {
       console.error("Checkout Error:", error);
-      alert("Checkout failed. Check your internet connection.");
-    } finally {
       hideLoader();
+      alert("Checkout failed. Check your internet connection.");
     }
   }
   async function initiateOnlinePayment(sessionData) {
@@ -334,12 +479,84 @@
       alert("Could not connect to payment gateway. Please try Cash payment instead.");
     }
   }
-  function resetBookingState() {
-    location.reload();
-  }
 
   // src/session.ts
+  var countdownInterval = null;
+  var elapsedInterval = null;
+  var stopSessionData = null;
+  function clearCountdown() {
+    if (countdownInterval !== null) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
+    if (elapsedInterval !== null) {
+      clearInterval(elapsedInterval);
+      elapsedInterval = null;
+    }
+  }
+  function parseSessionTime(timeStr) {
+    const now = /* @__PURE__ */ new Date();
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return now;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const period = match[3].toUpperCase();
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+  }
+  function startCountdown(endTime) {
+    clearCountdown();
+    function tick() {
+      const end = parseSessionTime(endTime);
+      const remaining = end.getTime() - Date.now();
+      const countdownEl = document.getElementById("sessionCountdown");
+      const warningEl = document.getElementById("sessionWarningBanner");
+      if (!countdownEl) {
+        clearCountdown();
+        return;
+      }
+      if (remaining <= 0) {
+        countdownEl.textContent = "00:00";
+        warningEl?.classList.remove("hidden");
+        clearCountdown();
+        return;
+      }
+      const totalSecs = Math.floor(remaining / 1e3);
+      const mins = Math.floor(totalSecs / 60);
+      const secs = totalSecs % 60;
+      countdownEl.textContent = `${mins}:${secs.toString().padStart(2, "0")}`;
+      if (remaining <= 5 * 60 * 1e3) {
+        warningEl?.classList.remove("hidden");
+        countdownEl.classList.add("text-rose-600", "animate-pulse");
+      } else {
+        warningEl?.classList.add("hidden");
+        countdownEl.classList.remove("text-rose-600", "animate-pulse");
+      }
+    }
+    tick();
+    countdownInterval = setInterval(tick, 1e3);
+  }
+  function startElapsedTimer(startTimestamp) {
+    clearCountdown();
+    function tick() {
+      const el = document.getElementById("sessionElapsed");
+      if (!el) {
+        clearCountdown();
+        return;
+      }
+      const elapsedMs = Date.now() - new Date(startTimestamp).getTime();
+      const totalSecs = Math.floor(elapsedMs / 1e3);
+      const hrs = Math.floor(totalSecs / 3600);
+      const mins = Math.floor(totalSecs % 3600 / 60);
+      const secs = totalSecs % 60;
+      el.textContent = hrs > 0 ? `${hrs}h ${mins.toString().padStart(2, "0")}m ${secs.toString().padStart(2, "0")}s` : `${mins}m ${secs.toString().padStart(2, "0")}s`;
+    }
+    tick();
+    elapsedInterval = setInterval(tick, 1e3);
+  }
   async function checkSessionStatus() {
+    clearCountdown();
     const db2 = getDb();
     const name = document.getElementById("searchName").value.trim();
     if (!name || !db2) return;
@@ -366,9 +583,55 @@
   function renderSessionCard(record) {
     const resultsDiv = document.getElementById("checkResultContainer");
     const statusColor = record.status === "ACTIVE" ? "text-emerald-600 bg-emerald-50 border-emerald-200" : record.status === "PENDING SESSION" ? "text-amber-600 bg-amber-50 border-amber-200" : "text-brand-neutral bg-brand-light border-brand-border";
-    const isOpenTime = record.duration === "Open Time";
+    const isOpenTime = record.duration === "Open Time" || record.duration.startsWith("Open Time");
+    const isActive = record.status === "ACTIVE";
     const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
-    const amountDisplay = isOpenTime && record.status === "ACTIVE" ? `\u20B1${rate}/hr (Open)` : `\u20B1${Number(record.amount).toFixed(2)}`;
+    const amountDisplay = isOpenTime && isActive ? `\u20B1${rate}/hr` : `\u20B1${Number(record.amount).toFixed(2)}`;
+    let timerSection = "";
+    if (isActive && !isOpenTime && record.endTime) {
+      timerSection = `
+      <div id="sessionWarningBanner" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-xs font-semibold text-rose-700 animate-pulse">
+        <i data-lucide="alarm-clock" class="w-4 h-4 shrink-0"></i>
+        <span>Your session is almost over! Please prepare to wrap up.</span>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+          <span class="text-[9px] text-brand-neutral uppercase block mb-1">Start</span>
+          <span class="text-sm font-bold text-brand-dark font-mono">${record.startTime}</span>
+        </div>
+        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+          <span class="text-[9px] text-brand-neutral uppercase block mb-1">End</span>
+          <span class="text-sm font-bold text-brand-dark font-mono">${record.endTime}</span>
+        </div>
+      </div>
+      <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
+        <span class="text-[10px] text-emerald-700 uppercase font-bold block mb-1">Time Remaining</span>
+        <span id="sessionCountdown" class="text-3xl font-extrabold font-['Outfit'] text-emerald-700 block digital-clock">--:--</span>
+      </div>`;
+    } else if (isActive && isOpenTime) {
+      timerSection = `
+      <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
+        <span class="text-[10px] text-amber-700 uppercase font-bold block mb-1">Time Elapsed</span>
+        <span id="sessionElapsed" class="text-2xl font-extrabold font-['Outfit'] text-amber-700 block digital-clock">0m 00s</span>
+        <span class="text-[10px] text-amber-600 mt-1 block">Billing at \u20B1${rate}/hr \u2014 15-min increments</span>
+      </div>
+      <button data-ref="${record.referenceNumber}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
+        <i data-lucide="timer-off" class="w-4 h-4"></i>
+        Stop My Session
+      </button>`;
+    } else {
+      timerSection = `
+      <div class="grid grid-cols-2 gap-3">
+        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+          <span class="text-[9px] text-brand-neutral uppercase block mb-1">Start</span>
+          <span class="text-sm font-bold text-brand-dark font-mono">${record.startTime}</span>
+        </div>
+        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+          <span class="text-[9px] text-brand-neutral uppercase block mb-1">End</span>
+          <span class="text-sm font-bold text-brand-dark font-mono">${record.endTime}</span>
+        </div>
+      </div>`;
+    }
     resultsDiv.innerHTML = `
     <div class="glass-ticket p-6 rounded-3xl border border-brand-border bg-brand-surface space-y-5 animate-fade-in shadow-soft">
       <div class="flex items-center justify-between border-b border-brand-border pb-4">
@@ -383,24 +646,20 @@
         <div class="flex justify-between"><span class="text-brand-neutral">Seat</span><span class="font-semibold text-brand-dark">${record.seatType}</span></div>
         <div class="flex justify-between"><span class="text-brand-neutral">Duration</span><span class="font-semibold text-brand-dark">${record.duration}</span></div>
         <div class="flex justify-between items-center pt-2 border-t border-brand-border">
-          <span class="text-brand-neutral">Amount</span>
+          <span class="text-brand-neutral">${isOpenTime && isActive ? "Rate" : "Amount"}</span>
           <span class="font-black font-['Outfit'] text-brand-primary text-lg">${amountDisplay}</span>
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
-          <span class="text-[9px] text-brand-neutral uppercase block mb-1">Start</span>
-          <span class="text-sm font-bold text-brand-dark font-mono">${record.startTime}</span>
-        </div>
-        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
-          <span class="text-[9px] text-brand-neutral uppercase block mb-1">End</span>
-          <span class="text-sm font-bold text-brand-dark font-mono">${record.endTime}</span>
-        </div>
-      </div>
+      ${timerSection}
       <button id="btnClearSearch" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Search Again</button>
     </div>
   `;
     if (window.lucide) lucide.createIcons();
+    if (isActive && !isOpenTime && record.endTime) {
+      setTimeout(() => startCountdown(record.endTime), 50);
+    } else if (isActive && isOpenTime && record.timestamp) {
+      setTimeout(() => startElapsedTimer(record.timestamp), 50);
+    }
   }
   function renderNoRecordFound(name) {
     const resultsDiv = document.getElementById("checkResultContainer");
@@ -419,9 +678,105 @@
     if (window.lucide) lucide.createIcons();
   }
   function clearSearchLookup() {
+    clearCountdown();
     document.getElementById("searchName").value = "";
     document.getElementById("checkResultContainer").classList.add("hidden");
     document.getElementById("checkEmptyState").classList.remove("hidden");
+  }
+  async function stopOpenTimeSession(refNum) {
+    const db2 = getDb();
+    if (!db2) return;
+    showLoader("Calculating...", "Computing your session billing...");
+    const snapshot = await db2.ref("sessions/" + refNum).once("value");
+    const record = snapshot.val();
+    hideLoader();
+    if (!record) return;
+    const elapsedMs = Date.now() - new Date(record.timestamp).getTime();
+    const elapsedHours = elapsedMs / (1e3 * 60 * 60);
+    const roundedHours = Math.max(0.25, Math.ceil(elapsedHours * 4) / 4);
+    const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+    const finalAmount = Math.round(roundedHours * rate * 100) / 100;
+    const hrs = Math.floor(roundedHours);
+    const mins = Math.round((roundedHours - hrs) * 60);
+    const timeLabel = `${hrs > 0 ? hrs + "h " : ""}${mins > 0 ? mins + "m" : ""}`.trim() || "15m";
+    stopSessionData = { refNum, record, finalAmount, timeLabel };
+    const stopTimeEl = document.getElementById("stopTimeUsed");
+    const stopAmtEl = document.getElementById("stopAmountDue");
+    if (stopTimeEl) stopTimeEl.textContent = timeLabel;
+    if (stopAmtEl) stopAmtEl.textContent = `\u20B1${finalAmount.toFixed(2)}`;
+    document.getElementById("stopSessionModal").classList.remove("hidden");
+    if (window.lucide) lucide.createIcons();
+  }
+  async function confirmStopCash() {
+    if (!stopSessionData) return;
+    const { refNum, finalAmount, timeLabel } = stopSessionData;
+    const db2 = getDb();
+    if (!db2) return;
+    try {
+      showLoader("Stopping...", "Ending your session...");
+      const endTime = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+      await db2.ref("sessions/" + refNum).update({
+        status: "EXPIRED",
+        amount: finalAmount,
+        endTime,
+        duration: `Open Time (${timeLabel})`
+      });
+      hideLoader();
+      document.getElementById("stopSessionModal").classList.add("hidden");
+      stopSessionData = null;
+      alert(`Session stopped.
+
+Ref#: ${refNum}
+Time Used: ${timeLabel}
+Amount Due: \u20B1${finalAmount.toFixed(2)}
+
+Please proceed to the cashier desk to complete your payment.`);
+      clearSearchLookup();
+    } catch (err) {
+      hideLoader();
+      console.error("Stop session error:", err);
+      alert("Failed to stop session. Please try again.");
+    }
+  }
+  async function confirmStopOnline() {
+    if (!stopSessionData) return;
+    const { refNum, record, finalAmount, timeLabel } = stopSessionData;
+    const db2 = getDb();
+    if (!db2) return;
+    try {
+      showLoader("Preparing...", "Setting up your online payment...");
+      const endTime = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+      await db2.ref("sessions/" + refNum).update({
+        status: "EXPIRED",
+        amount: finalAmount,
+        endTime,
+        duration: `Open Time (${timeLabel})`
+      });
+      const res = await fetch("/api/create-stop-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          referenceNumber: refNum,
+          fullName: record.fullName,
+          seatType: record.seatType,
+          duration: `Open Time (${timeLabel})`,
+          amount: finalAmount
+        })
+      });
+      const data = await res.json();
+      hideLoader();
+      if (data.invoiceUrl) {
+        document.getElementById("stopSessionModal").classList.add("hidden");
+        stopSessionData = null;
+        window.location.href = data.invoiceUrl;
+      } else {
+        alert("Could not create payment link. Please pay at the cashier desk instead.\n\nRef#: " + refNum + "\nAmount: \u20B1" + finalAmount.toFixed(2));
+      }
+    } catch (err) {
+      hideLoader();
+      console.error("Online stop payment error:", err);
+      alert("Payment link creation failed. Please pay at the cashier instead.");
+    }
   }
 
   // src/admin.ts
@@ -704,6 +1059,7 @@ This permanently removes them from the database.`)) return;
         adminState.isAuthenticated = true;
         unlockAdminMode();
       }
+      handleUrlParams();
       console.log("Study Hub Portal Ready.");
     } catch (err) {
       console.error("Initialization Failed:", err);
@@ -712,6 +1068,33 @@ This permanently removes them from the database.`)) return;
         debugDiv.classList.remove("hidden");
         debugDiv.innerHTML = `\u26A0\uFE0F App Init Failed: ${err.message}`;
       }
+    }
+  }
+  function handleUrlParams() {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    const ref = params.get("ref");
+    if (tab === "check" && ref) {
+      const db2 = getDb();
+      if (db2) {
+        switchTab("check");
+        db2.ref("sessions/" + ref).once("value").then((snap) => {
+          if (snap.exists()) {
+            const record = snap.val();
+            const searchInput = document.getElementById("searchName");
+            if (searchInput && record.fullName) {
+              searchInput.value = record.fullName;
+              setTimeout(() => {
+                const btn = document.getElementById("btnSearchSession");
+                if (btn) btn.click();
+              }, 300);
+            }
+          }
+        }).catch(() => {
+          switchTab("check");
+        });
+      }
+      window.history.replaceState({}, document.title, "/");
     }
   }
   function setupListeners() {
@@ -739,7 +1122,6 @@ This permanently removes them from the database.`)) return;
     const target = e.target.closest("button, #adminTriggerIcon");
     if (!target) return;
     const id = target.id;
-    console.log("Interactive click detected:", id || target.className);
     if (id === "tabAvail") switchTab("avail");
     if (id === "tabCheck") switchTab("check");
     if (id === "btnConfirmBooking") {
@@ -758,6 +1140,10 @@ This permanently removes them from the database.`)) return;
     if (id === "btnCancelAdminAuth") closeAdminAuth();
     if (id === "btnSubmitAdminAuth") submitAdminAuth();
     if (id === "btnCloseTicket" || id === "btnDoneTicket") closeTicketModal();
+    if (id === "btnDownloadReceipt") {
+      e.stopPropagation();
+      downloadReceipt();
+    }
     if (id === "btnRefreshAdmin") {
       if (state.dbConnected) refreshAdminDashboard();
       else alert("Database disconnected.");
@@ -787,6 +1173,20 @@ This permanently removes them from the database.`)) return;
     if (target.classList.contains("btn-end-session")) {
       const refNum = target.getAttribute("data-ref");
       if (refNum && state.dbConnected) endSession(refNum);
+    }
+    if (target.classList.contains("btn-customer-stop-session")) {
+      const refNum = target.getAttribute("data-ref");
+      if (refNum && state.dbConnected) stopOpenTimeSession(refNum);
+      else if (!state.dbConnected) alert("Cannot stop session while database is disconnected.");
+    }
+    if (id === "btnCancelStop") {
+      document.getElementById("stopSessionModal").classList.add("hidden");
+    }
+    if (id === "btnStopPayCash") {
+      confirmStopCash();
+    }
+    if (id === "btnStopPayOnline") {
+      confirmStopOnline();
     }
   }
   document.addEventListener("DOMContentLoaded", init);

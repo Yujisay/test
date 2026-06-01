@@ -58,7 +58,7 @@ app.post('/api/create-payment', async (req: Request, res: Response) => {
       currency: 'PHP',
       customer: { given_names: fullName },
       customer_notification_preference: { invoice_paid: [] },
-      success_redirect_url: `${baseUrl}/payment-success.html?ref=${referenceNumber}`,
+      success_redirect_url: `${baseUrl}/payment-success.html?ref=${referenceNumber}&tab=check`,
       failure_redirect_url: `${baseUrl}/payment-failed.html?ref=${referenceNumber}`,
       items: [{ name: `${seatType} — ${duration}`, quantity: 1, price: Math.round(amount), category: 'WiFi Access' }]
     };
@@ -89,6 +89,52 @@ app.post('/api/create-payment', async (req: Request, res: Response) => {
   }
 });
 
+// Stop-payment: create Xendit invoice for Open Time final billing (session already marked EXPIRED)
+app.post('/api/create-stop-payment', async (req: Request, res: Response) => {
+  try {
+    const { referenceNumber, fullName, seatType, duration, amount } = req.body;
+
+    if (!referenceNumber || !fullName || !amount) {
+      return res.status(400).json({ error: 'Missing required fields.' });
+    }
+
+    const baseUrl = getBaseUrl(req);
+    const stopRef = `${referenceNumber}-STOP`;
+
+    const invoicePayload = {
+      external_id: stopRef,
+      payer_email: `${fullName.toLowerCase().replace(/\s+/g, '.')}@studyhub.local`,
+      description: `Study Hub WiFi — ${seatType} ${duration} (Final Bill)`,
+      amount: Math.round(amount),
+      currency: 'PHP',
+      customer: { given_names: fullName },
+      customer_notification_preference: { invoice_paid: [] },
+      success_redirect_url: `${baseUrl}/payment-success.html?ref=${referenceNumber}&tab=check&paid=1`,
+      failure_redirect_url: `${baseUrl}/payment-failed.html?ref=${referenceNumber}`,
+      items: [{ name: `${seatType} — ${duration}`, quantity: 1, price: Math.round(amount), category: 'WiFi Access' }]
+    };
+
+    const xenditRes = await axios.post(
+      'https://api.xendit.co/v2/invoices',
+      invoicePayload,
+      { auth: { username: XENDIT_SECRET_KEY, password: '' }, headers: { 'Content-Type': 'application/json' } }
+    );
+
+    const invoice = xenditRes.data;
+
+    // Record the stop invoice URL on the session for reference
+    await firebaseUpdate(`sessions/${referenceNumber}`, {
+      xenditStopInvoiceUrl: invoice.invoice_url,
+      xenditStopInvoiceId: invoice.id
+    });
+
+    res.json({ success: true, invoiceUrl: invoice.invoice_url });
+  } catch (err: any) {
+    console.error('Create stop payment error:', err?.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to create stop payment link.' });
+  }
+});
+
 app.post('/api/xendit-webhook', async (req: Request, res: Response) => {
   try {
     const incomingToken = req.headers['x-callback-token'];
@@ -101,13 +147,33 @@ app.post('/api/xendit-webhook', async (req: Request, res: Response) => {
     console.log('Xendit webhook received:', event.status, event.external_id);
 
     if (event.status === 'PAID' || event.status === 'SETTLED') {
-      await firebaseUpdate(`sessions/${event.external_id}`, {
-        status: 'PENDING SESSION',
-        paidAt: new Date().toISOString(),
-        amount: event.paid_amount || event.amount,
-        paymentConfirmed: true
-      });
-      console.log(`Payment confirmed for ${event.external_id} — ₱${event.paid_amount || event.amount}`);
+      // Handle stop-payment invoices (external_id ends with -STOP)
+      const externalId: string = event.external_id || '';
+      const isStopPayment = externalId.endsWith('-STOP');
+      const sessionRef = isStopPayment ? externalId.replace(/-STOP$/, '') : externalId;
+
+      // Get current session status to avoid overwriting EXPIRED back to PENDING SESSION
+      const currentSession = await firebaseGet(`sessions/${sessionRef}`);
+      const currentStatus = currentSession?.status;
+
+      if (isStopPayment || currentStatus === 'EXPIRED') {
+        // Just confirm payment — session is already closed
+        await firebaseUpdate(`sessions/${sessionRef}`, {
+          paidAt: new Date().toISOString(),
+          paymentConfirmed: true,
+          amount: event.paid_amount || event.amount
+        });
+        console.log(`Stop payment confirmed for ${sessionRef} — ₱${event.paid_amount || event.amount}`);
+      } else {
+        // Normal flow: mark as ready for admin activation
+        await firebaseUpdate(`sessions/${sessionRef}`, {
+          status: 'PENDING SESSION',
+          paidAt: new Date().toISOString(),
+          amount: event.paid_amount || event.amount,
+          paymentConfirmed: true
+        });
+        console.log(`Payment confirmed for ${sessionRef} — ₱${event.paid_amount || event.amount}`);
+      }
     }
 
     res.json({ success: true });
@@ -121,7 +187,7 @@ app.get('/api/payment-status/:refNum', async (req: Request, res: Response) => {
   try {
     const data = await firebaseGet(`sessions/${req.params.refNum}`);
     if (!data) return res.status(404).json({ error: 'Session not found' });
-    res.json({ status: data.status, paymentConfirmed: data.paymentConfirmed || false });
+    res.json({ status: data.status, paymentConfirmed: data.paymentConfirmed || false, fullName: data.fullName || '' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to check status' });
   }

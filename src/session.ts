@@ -1,8 +1,92 @@
 import { HOURLY_RATE } from './config';
 import { getDb } from './firebase';
 import { SessionRecord } from './types';
+import { showLoader, hideLoader } from './ui';
+
+let countdownInterval: ReturnType<typeof setInterval> | null = null;
+let elapsedInterval: ReturnType<typeof setInterval> | null = null;
+
+export let stopSessionData: {
+  refNum: string;
+  record: SessionRecord;
+  finalAmount: number;
+  timeLabel: string;
+} | null = null;
+
+function clearCountdown(): void {
+  if (countdownInterval !== null) { clearInterval(countdownInterval); countdownInterval = null; }
+  if (elapsedInterval !== null) { clearInterval(elapsedInterval); elapsedInterval = null; }
+}
+
+function parseSessionTime(timeStr: string): Date {
+  const now = new Date();
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return now;
+  let h = parseInt(match[1]);
+  const m = parseInt(match[2]);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && h !== 12) h += 12;
+  if (period === 'AM' && h === 12) h = 0;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+}
+
+function startCountdown(endTime: string): void {
+  clearCountdown();
+
+  function tick() {
+    const end = parseSessionTime(endTime);
+    const remaining = end.getTime() - Date.now();
+    const countdownEl = document.getElementById('sessionCountdown');
+    const warningEl = document.getElementById('sessionWarningBanner');
+    if (!countdownEl) { clearCountdown(); return; }
+
+    if (remaining <= 0) {
+      countdownEl.textContent = '00:00';
+      warningEl?.classList.remove('hidden');
+      clearCountdown();
+      return;
+    }
+
+    const totalSecs = Math.floor(remaining / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    countdownEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+    if (remaining <= 5 * 60 * 1000) {
+      warningEl?.classList.remove('hidden');
+      countdownEl.classList.add('text-rose-600', 'animate-pulse');
+    } else {
+      warningEl?.classList.add('hidden');
+      countdownEl.classList.remove('text-rose-600', 'animate-pulse');
+    }
+  }
+
+  tick();
+  countdownInterval = setInterval(tick, 1000);
+}
+
+function startElapsedTimer(startTimestamp: string): void {
+  clearCountdown();
+
+  function tick() {
+    const el = document.getElementById('sessionElapsed');
+    if (!el) { clearCountdown(); return; }
+    const elapsedMs = Date.now() - new Date(startTimestamp).getTime();
+    const totalSecs = Math.floor(elapsedMs / 1000);
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    el.textContent = hrs > 0
+      ? `${hrs}h ${mins.toString().padStart(2, '0')}m ${secs.toString().padStart(2, '0')}s`
+      : `${mins}m ${secs.toString().padStart(2, '0')}s`;
+  }
+
+  tick();
+  elapsedInterval = setInterval(tick, 1000);
+}
 
 export async function checkSessionStatus(): Promise<void> {
+  clearCountdown();
   const db = getDb();
   const name = (document.getElementById("searchName") as HTMLInputElement).value.trim();
   if (!name || !db) return;
@@ -38,10 +122,58 @@ export function renderSessionCard(record: SessionRecord): void {
       ? 'text-amber-600 bg-amber-50 border-amber-200'
       : 'text-brand-neutral bg-brand-light border-brand-border';
 
-  const isOpenTime = record.duration === 'Open Time';
+  const isOpenTime = record.duration === 'Open Time' || record.duration.startsWith('Open Time');
+  const isActive = record.status === 'ACTIVE';
   const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
-  const amountDisplay = isOpenTime && record.status === 'ACTIVE'
-    ? `₱${rate}/hr (Open)` : `₱${Number(record.amount).toFixed(2)}`;
+  const amountDisplay = isOpenTime && isActive
+    ? `₱${rate}/hr` : `₱${Number(record.amount).toFixed(2)}`;
+
+  // Countdown / elapsed section
+  let timerSection = '';
+  if (isActive && !isOpenTime && record.endTime) {
+    timerSection = `
+      <div id="sessionWarningBanner" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-xs font-semibold text-rose-700 animate-pulse">
+        <i data-lucide="alarm-clock" class="w-4 h-4 shrink-0"></i>
+        <span>Your session is almost over! Please prepare to wrap up.</span>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+          <span class="text-[9px] text-brand-neutral uppercase block mb-1">Start</span>
+          <span class="text-sm font-bold text-brand-dark font-mono">${record.startTime}</span>
+        </div>
+        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+          <span class="text-[9px] text-brand-neutral uppercase block mb-1">End</span>
+          <span class="text-sm font-bold text-brand-dark font-mono">${record.endTime}</span>
+        </div>
+      </div>
+      <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
+        <span class="text-[10px] text-emerald-700 uppercase font-bold block mb-1">Time Remaining</span>
+        <span id="sessionCountdown" class="text-3xl font-extrabold font-['Outfit'] text-emerald-700 block digital-clock">--:--</span>
+      </div>`;
+  } else if (isActive && isOpenTime) {
+    timerSection = `
+      <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
+        <span class="text-[10px] text-amber-700 uppercase font-bold block mb-1">Time Elapsed</span>
+        <span id="sessionElapsed" class="text-2xl font-extrabold font-['Outfit'] text-amber-700 block digital-clock">0m 00s</span>
+        <span class="text-[10px] text-amber-600 mt-1 block">Billing at ₱${rate}/hr — 15-min increments</span>
+      </div>
+      <button data-ref="${record.referenceNumber}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
+        <i data-lucide="timer-off" class="w-4 h-4"></i>
+        Stop My Session
+      </button>`;
+  } else {
+    timerSection = `
+      <div class="grid grid-cols-2 gap-3">
+        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+          <span class="text-[9px] text-brand-neutral uppercase block mb-1">Start</span>
+          <span class="text-sm font-bold text-brand-dark font-mono">${record.startTime}</span>
+        </div>
+        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
+          <span class="text-[9px] text-brand-neutral uppercase block mb-1">End</span>
+          <span class="text-sm font-bold text-brand-dark font-mono">${record.endTime}</span>
+        </div>
+      </div>`;
+  }
 
   resultsDiv.innerHTML = `
     <div class="glass-ticket p-6 rounded-3xl border border-brand-border bg-brand-surface space-y-5 animate-fade-in shadow-soft">
@@ -57,24 +189,23 @@ export function renderSessionCard(record: SessionRecord): void {
         <div class="flex justify-between"><span class="text-brand-neutral">Seat</span><span class="font-semibold text-brand-dark">${record.seatType}</span></div>
         <div class="flex justify-between"><span class="text-brand-neutral">Duration</span><span class="font-semibold text-brand-dark">${record.duration}</span></div>
         <div class="flex justify-between items-center pt-2 border-t border-brand-border">
-          <span class="text-brand-neutral">Amount</span>
+          <span class="text-brand-neutral">${isOpenTime && isActive ? 'Rate' : 'Amount'}</span>
           <span class="font-black font-['Outfit'] text-brand-primary text-lg">${amountDisplay}</span>
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
-          <span class="text-[9px] text-brand-neutral uppercase block mb-1">Start</span>
-          <span class="text-sm font-bold text-brand-dark font-mono">${record.startTime}</span>
-        </div>
-        <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
-          <span class="text-[9px] text-brand-neutral uppercase block mb-1">End</span>
-          <span class="text-sm font-bold text-brand-dark font-mono">${record.endTime}</span>
-        </div>
-      </div>
+      ${timerSection}
       <button id="btnClearSearch" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Search Again</button>
     </div>
   `;
+
   if (window.lucide) lucide.createIcons();
+
+  // Start timers after DOM is updated
+  if (isActive && !isOpenTime && record.endTime) {
+    setTimeout(() => startCountdown(record.endTime), 50);
+  } else if (isActive && isOpenTime && record.timestamp) {
+    setTimeout(() => startElapsedTimer(record.timestamp), 50);
+  }
 }
 
 export function renderNoRecordFound(name: string): void {
@@ -95,7 +226,111 @@ export function renderNoRecordFound(name: string): void {
 }
 
 export function clearSearchLookup(): void {
+  clearCountdown();
   (document.getElementById("searchName") as HTMLInputElement).value = "";
   (document.getElementById("checkResultContainer") as HTMLElement).classList.add("hidden");
   (document.getElementById("checkEmptyState") as HTMLElement).classList.remove("hidden");
+}
+
+export async function stopOpenTimeSession(refNum: string): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+
+  showLoader("Calculating...", "Computing your session billing...");
+  const snapshot = await db.ref('sessions/' + refNum).once('value');
+  const record: SessionRecord = snapshot.val();
+  hideLoader();
+
+  if (!record) return;
+
+  const elapsedMs = Date.now() - new Date(record.timestamp).getTime();
+  const elapsedHours = elapsedMs / (1000 * 60 * 60);
+  const roundedHours = Math.max(0.25, Math.ceil(elapsedHours * 4) / 4);
+  const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+  const finalAmount = Math.round(roundedHours * rate * 100) / 100;
+  const hrs = Math.floor(roundedHours);
+  const mins = Math.round((roundedHours - hrs) * 60);
+  const timeLabel = `${hrs > 0 ? hrs + 'h ' : ''}${mins > 0 ? mins + 'm' : ''}`.trim() || '15m';
+
+  stopSessionData = { refNum, record, finalAmount, timeLabel };
+
+  const stopTimeEl = document.getElementById('stopTimeUsed');
+  const stopAmtEl = document.getElementById('stopAmountDue');
+  if (stopTimeEl) stopTimeEl.textContent = timeLabel;
+  if (stopAmtEl) stopAmtEl.textContent = `₱${finalAmount.toFixed(2)}`;
+
+  (document.getElementById('stopSessionModal') as HTMLElement).classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+export async function confirmStopCash(): Promise<void> {
+  if (!stopSessionData) return;
+  const { refNum, finalAmount, timeLabel } = stopSessionData;
+  const db = getDb();
+  if (!db) return;
+
+  try {
+    showLoader("Stopping...", "Ending your session...");
+    const endTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    await db.ref('sessions/' + refNum).update({
+      status: 'EXPIRED',
+      amount: finalAmount,
+      endTime,
+      duration: `Open Time (${timeLabel})`
+    });
+    hideLoader();
+    (document.getElementById('stopSessionModal') as HTMLElement).classList.add('hidden');
+    stopSessionData = null;
+    alert(`Session stopped.\n\nRef#: ${refNum}\nTime Used: ${timeLabel}\nAmount Due: ₱${finalAmount.toFixed(2)}\n\nPlease proceed to the cashier desk to complete your payment.`);
+    clearSearchLookup();
+  } catch (err) {
+    hideLoader();
+    console.error("Stop session error:", err);
+    alert("Failed to stop session. Please try again.");
+  }
+}
+
+export async function confirmStopOnline(): Promise<void> {
+  if (!stopSessionData) return;
+  const { refNum, record, finalAmount, timeLabel } = stopSessionData;
+  const db = getDb();
+  if (!db) return;
+
+  try {
+    showLoader("Preparing...", "Setting up your online payment...");
+    const endTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    await db.ref('sessions/' + refNum).update({
+      status: 'EXPIRED',
+      amount: finalAmount,
+      endTime,
+      duration: `Open Time (${timeLabel})`
+    });
+
+    const res = await fetch('/api/create-stop-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        referenceNumber: refNum,
+        fullName: record.fullName,
+        seatType: record.seatType,
+        duration: `Open Time (${timeLabel})`,
+        amount: finalAmount
+      })
+    });
+    const data = await res.json();
+    hideLoader();
+
+    if (data.invoiceUrl) {
+      (document.getElementById('stopSessionModal') as HTMLElement).classList.add('hidden');
+      stopSessionData = null;
+      window.location.href = data.invoiceUrl;
+    } else {
+      alert('Could not create payment link. Please pay at the cashier desk instead.\n\nRef#: ' + refNum + '\nAmount: ₱' + finalAmount.toFixed(2));
+    }
+  } catch (err) {
+    hideLoader();
+    console.error("Online stop payment error:", err);
+    alert("Payment link creation failed. Please pay at the cashier instead.");
+  }
 }

@@ -20,7 +20,7 @@
     </div>
     <div>
       <h1 class="text-2xl font-extrabold font-['Outfit'] text-brand-dark">Payment Successful!</h1>
-      <p class="text-sm text-brand-neutral mt-2 leading-relaxed">Your WiFi session has been paid. Please proceed to the Study Hub cashier to activate your session.</p>
+      <p class="text-sm text-brand-neutral mt-2 leading-relaxed">Your WiFi session payment has been received. Please proceed to the Study Hub cashier to activate your session.</p>
     </div>
     <div class="bg-brand-surface border border-brand-border rounded-2xl p-5 space-y-3 text-sm text-left">
       <div class="flex justify-between">
@@ -36,18 +36,32 @@
       <i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0"></i>
       <span>Show this page or your reference number to the cashier. Your WiFi will be activated once they confirm your seat.</span>
     </div>
-    <a href="/" class="block w-full py-3.5 rounded-2xl bg-brand-primary text-white font-bold font-['Outfit'] text-sm hover:bg-brand-primary/90 transition-all">
-      Back to Portal
+
+    <!-- Auto-redirect countdown -->
+    <div id="redirectNotice" class="hidden p-3 bg-brand-primary/5 border border-brand-primary/20 rounded-xl text-xs text-brand-primary font-semibold flex items-center justify-center gap-2">
+      <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+      Redirecting to Session Dashboard in <span id="countdown">5</span>s…
+    </div>
+
+    <a id="dashboardLink" href="/" class="block w-full py-3.5 rounded-2xl bg-brand-primary text-white font-bold font-['Outfit'] text-sm hover:bg-brand-primary/90 transition-all">
+      Go to My Session Dashboard
     </a>
   </div>
   <script>
     if (window.lucide) lucide.createIcons();
     window.addEventListener('load', () => { if (window.lucide) lucide.createIcons(); });
+
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref') || '—';
+    const autoRedirect = params.get('tab') === 'check';
+
     document.getElementById('refNum').textContent = ref;
+
     if (ref !== '—') {
-      fetch(`/api/payment-status/${ref}`)
+      const dashLink = document.getElementById('dashboardLink');
+      if (dashLink) dashLink.href = '/?tab=check&ref=' + ref;
+
+      fetch('/api/payment-status/' + ref)
         .then(r => r.json())
         .then(data => {
           const badge = document.getElementById('statusBadge');
@@ -55,11 +69,33 @@
             badge.textContent = 'PAID — PENDING ACTIVATION';
           } else if (data.status === 'ACTIVE') {
             badge.textContent = 'ACTIVE';
+          } else if (data.status === 'EXPIRED') {
+            badge.textContent = 'PAYMENT CONFIRMED';
           } else {
             badge.textContent = data.status || 'PAID';
           }
+          startAutoRedirect();
         })
-        .catch(() => { document.getElementById('statusBadge').textContent = 'PAID'; });
+        .catch(() => {
+          document.getElementById('statusBadge').textContent = 'PAID';
+          startAutoRedirect();
+        });
+    }
+
+    function startAutoRedirect() {
+      if (!autoRedirect || ref === '—') return;
+      const notice = document.getElementById('redirectNotice');
+      const countdownEl = document.getElementById('countdown');
+      if (notice) notice.classList.remove('hidden');
+      let secs = 5;
+      const timer = setInterval(() => {
+        secs--;
+        if (countdownEl) countdownEl.textContent = String(secs);
+        if (secs <= 0) {
+          clearInterval(timer);
+          window.location.href = '/?tab=check&ref=' + ref;
+        }
+      }, 1000);
     }
   </script>
 </body>

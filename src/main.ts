@@ -2,13 +2,14 @@ console.log("Study Hub Portal loading...");
 
 import { initFirebase, getDb } from './firebase';
 import { state, adminState } from './state';
-import { switchTab, updateConnectionStatus, closeTicketModal, closeAdminAuth } from './ui';
+import { switchTab, updateConnectionStatus, closeTicketModal, closeAdminAuth, downloadReceipt } from './ui';
 import {
   onDurationChange, updateFormPreview,
   selectPaymentMethod, initiateCheckout
 } from './booking';
 import {
-  checkSessionStatus, clearSearchLookup
+  checkSessionStatus, clearSearchLookup,
+  stopOpenTimeSession, confirmStopCash, confirmStopOnline
 } from './session';
 import {
   handleAdminTrigger, submitAdminAuth, unlockAdminMode, exitAdminMode,
@@ -48,6 +49,9 @@ function init(): void {
       unlockAdminMode();
     }
 
+    // Handle post-payment redirect: ?tab=check&ref=REFNUM
+    handleUrlParams();
+
     console.log("Study Hub Portal Ready.");
   } catch (err: any) {
     console.error("Initialization Failed:", err);
@@ -56,6 +60,35 @@ function init(): void {
       debugDiv.classList.remove('hidden');
       debugDiv.innerHTML = `⚠️ App Init Failed: ${err.message}`;
     }
+  }
+}
+
+function handleUrlParams(): void {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab');
+  const ref = params.get('ref');
+
+  if (tab === 'check' && ref) {
+    // Look up the session by ref to get the name, then auto-search
+    const db = getDb();
+    if (db) {
+      switchTab('check');
+      db.ref('sessions/' + ref).once('value').then((snap: any) => {
+        if (snap.exists()) {
+          const record = snap.val();
+          const searchInput = document.getElementById("searchName") as HTMLInputElement;
+          if (searchInput && record.fullName) {
+            searchInput.value = record.fullName;
+            setTimeout(() => {
+              const btn = document.getElementById("btnSearchSession") as HTMLButtonElement;
+              if (btn) btn.click();
+            }, 300);
+          }
+        }
+      }).catch(() => { switchTab('check'); });
+    }
+    // Clean URL without reload
+    window.history.replaceState({}, document.title, '/');
   }
 }
 
@@ -82,7 +115,6 @@ function handleGlobalClicks(e: MouseEvent): void {
   if (!target) return;
 
   const id = target.id;
-  console.log("Interactive click detected:", id || target.className);
 
   if (id === 'tabAvail') switchTab('avail');
   if (id === 'tabCheck') switchTab('check');
@@ -102,6 +134,11 @@ function handleGlobalClicks(e: MouseEvent): void {
   if (id === 'btnCancelAdminAuth') closeAdminAuth();
   if (id === 'btnSubmitAdminAuth') submitAdminAuth();
   if (id === 'btnCloseTicket' || id === 'btnDoneTicket') closeTicketModal();
+
+  if (id === 'btnDownloadReceipt') {
+    e.stopPropagation();
+    downloadReceipt();
+  }
 
   if (id === 'btnRefreshAdmin') {
     if (state.dbConnected) refreshAdminDashboard();
@@ -128,11 +165,28 @@ function handleGlobalClicks(e: MouseEvent): void {
     const refNum = target.getAttribute('data-ref');
     if (refNum && state.dbConnected) endSession(refNum);
   }
+
+  // Customer stop session
+  if (target.classList.contains('btn-customer-stop-session')) {
+    const refNum = target.getAttribute('data-ref');
+    if (refNum && state.dbConnected) stopOpenTimeSession(refNum);
+    else if (!state.dbConnected) alert("Cannot stop session while database is disconnected.");
+  }
+
+  // Stop session modal buttons
+  if (id === 'btnCancelStop') {
+    (document.getElementById('stopSessionModal') as HTMLElement).classList.add('hidden');
+  }
+  if (id === 'btnStopPayCash') {
+    confirmStopCash();
+  }
+  if (id === 'btnStopPayOnline') {
+    confirmStopOnline();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);
 
-// Re-render admin when crossing mobile/desktop breakpoint so page size updates
 let lastBreakpoint = window.innerWidth < 768 ? 'mobile' : 'desktop';
 window.addEventListener('resize', () => {
   const current = window.innerWidth < 768 ? 'mobile' : 'desktop';

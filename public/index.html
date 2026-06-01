@@ -206,7 +206,7 @@
               <span id="previewDuration" class="font-semibold text-brand-dark">--</span>
             </div>
             <div class="flex justify-between items-center pt-2 border-t border-brand-border">
-              <span class="text-brand-neutral text-sm">Total</span>
+              <span id="previewPriceLabel" class="text-brand-neutral text-sm">Total</span>
               <span id="previewPrice" class="text-xl font-black font-['Outfit'] text-brand-primary">&#8369;0.00</span>
             </div>
           </div>
@@ -214,7 +214,8 @@
             <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
             <span>Open Time billing is calculated at session end based on actual hours used. Rate shown is per hour.</span>
           </div>
-          <div class="grid grid-cols-2 gap-3 pt-1">
+          <!-- Start/End Time Grid — hidden for Open Time -->
+          <div id="previewTimeGrid" class="grid grid-cols-2 gap-3 pt-1">
             <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
               <span class="text-[9px] text-brand-neutral uppercase block mb-1">Start Time</span>
               <span id="previewStart" class="text-sm font-bold text-brand-dark font-mono">--:--</span>
@@ -243,6 +244,9 @@
           </div>
           <p id="onlinePayNote" class="hidden text-[11px] text-brand-neutral leading-relaxed pt-1 px-1">
             You'll be redirected to a secure Xendit payment page. Supports GCash, Maya, credit/debit cards, and bank transfers.
+          </p>
+          <p id="onlineOpenTimeNote" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-2.5 leading-relaxed">
+            For Open Time + Online: your session will be activated by the cashier. A payment link will be generated when you stop your session.
           </p>
         </div>
 
@@ -507,7 +511,7 @@
       <!-- Ticket punches -->
       <div class="absolute left-0 top-[228px] w-4 h-8 bg-brand-light rounded-r-full -translate-x-1/2 pointer-events-none border-r border-brand-border"></div>
       <div class="absolute right-0 top-[228px] w-4 h-8 bg-brand-light rounded-l-full translate-x-1/2 pointer-events-none border-l border-brand-border"></div>
-      <div class="p-6 bg-brand-surface text-center space-y-4">
+      <div class="p-6 bg-brand-surface text-center space-y-3">
         <div class="flex flex-col items-center justify-center opacity-65">
           <div class="flex items-center space-x-[2px] h-7 bg-brand-dark px-3 py-1 rounded text-white">
             <div class="w-0.5 h-full bg-white"></div><div class="w-1.5 h-full bg-white"></div>
@@ -520,9 +524,59 @@
           </div>
           <span class="text-[9px] font-mono tracking-widest text-brand-neutral mt-1 select-none uppercase">STUDY-HUB-SECURE-TICKET</span>
         </div>
-        <button id="btnDoneTicket" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all select-none">
-          Done & Close Ticket
+        <!-- Download Receipt Button -->
+        <button id="btnDownloadReceipt"
+          class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-primary/10 border border-brand-primary/30 hover:bg-brand-primary/20 text-brand-primary transition-all flex items-center justify-center gap-2">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          Download Receipt
         </button>
+        <button id="btnDoneTicket" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all select-none">
+          Done &amp; View My Session
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stop Session Modal -->
+  <div id="stopSessionModal" class="fixed inset-0 bg-brand-dark/20 backdrop-blur-md z-40 flex items-center justify-center hidden animate-fade-in">
+    <div class="bg-brand-surface border border-brand-border rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl mx-4">
+      <div class="bg-rose-600 p-5 text-center text-white relative">
+        <div class="absolute top-4 right-4">
+          <button id="btnCancelStop" class="w-7 h-7 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
+            <i data-lucide="x" class="w-4 h-4 text-white"></i>
+          </button>
+        </div>
+        <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-2">
+          <i data-lucide="timer-off" class="w-6 h-6"></i>
+        </div>
+        <h3 class="text-base font-extrabold font-['Outfit']">Stop Session</h3>
+        <p class="text-xs text-rose-100 mt-0.5">Here's your final billing summary.</p>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="text-center p-4 bg-brand-light rounded-2xl border border-brand-border">
+            <span class="text-[10px] text-brand-neutral uppercase font-semibold block mb-1">Time Used</span>
+            <span id="stopTimeUsed" class="text-xl font-extrabold font-['Outfit'] text-brand-dark block">0h 0m</span>
+          </div>
+          <div class="text-center p-4 bg-brand-primary/5 rounded-2xl border border-brand-primary/20">
+            <span class="text-[10px] text-brand-neutral uppercase font-semibold block mb-1">Amount Due</span>
+            <span id="stopAmountDue" class="text-xl font-extrabold font-['Outfit'] text-brand-primary block">₱0.00</span>
+          </div>
+        </div>
+        <p class="text-xs text-brand-neutral text-center font-medium">How would you like to pay?</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button id="btnStopPayCash"
+            class="py-3 px-4 rounded-xl border-2 border-brand-border bg-brand-surface font-bold text-sm flex items-center justify-center gap-2 hover:border-brand-primary hover:bg-brand-primary/5 transition-all text-brand-dark">
+            <i data-lucide="banknote" class="w-4 h-4 text-brand-primary"></i>
+            Pay Cash
+          </button>
+          <button id="btnStopPayOnline"
+            class="py-3 px-4 rounded-xl border-2 border-brand-border bg-brand-surface font-bold text-sm flex items-center justify-center gap-2 hover:border-brand-primary hover:bg-brand-primary/5 transition-all text-brand-dark">
+            <i data-lucide="credit-card" class="w-4 h-4 text-brand-primary"></i>
+            Pay Online
+          </button>
+        </div>
+        <p class="text-[10px] text-brand-neutral text-center leading-relaxed">Billed in 15-minute increments. Minimum charge: 15 minutes.</p>
       </div>
     </div>
   </div>

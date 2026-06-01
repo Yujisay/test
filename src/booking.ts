@@ -34,12 +34,34 @@ export function onDurationChange(): void {
     wrapper.classList.toggle("hidden", duration !== 'Custom');
   }
   updateFormPreview();
+  updateOnlineNoteVisibility();
+}
+
+function updateOnlineNoteVisibility(): void {
+  const duration = (document.getElementById("durationSelect") as HTMLSelectElement).value;
+  const onlineNote = document.getElementById("onlinePayNote") as HTMLElement;
+  const onlineOpenTimeNote = document.getElementById("onlineOpenTimeNote") as HTMLElement;
+
+  if (state.paymentMethod === 'online') {
+    if (duration === 'Open Time') {
+      onlineNote?.classList.add("hidden");
+      onlineOpenTimeNote?.classList.remove("hidden");
+    } else {
+      onlineNote?.classList.remove("hidden");
+      onlineOpenTimeNote?.classList.add("hidden");
+    }
+  } else {
+    onlineNote?.classList.add("hidden");
+    onlineOpenTimeNote?.classList.add("hidden");
+  }
 }
 
 export function updateFormPreview(): void {
   const seatType = (document.getElementById("seatTypeSelect") as HTMLSelectElement).value;
   const duration = (document.getElementById("durationSelect") as HTMLSelectElement).value;
   const card = document.getElementById("pricePreviewCard") as HTMLElement;
+  const timeGrid = document.getElementById("previewTimeGrid") as HTMLElement;
+  const priceLabel = document.getElementById("previewPriceLabel") as HTMLElement;
 
   if (!seatType || !duration) { card?.classList.add("hidden"); return; }
   if (duration === 'Custom') {
@@ -72,15 +94,19 @@ export function updateFormPreview(): void {
   (document.getElementById("previewSeat") as HTMLElement).textContent = seatType;
   (document.getElementById("previewDuration") as HTMLElement).textContent = displayDuration;
   (document.getElementById("previewDate") as HTMLElement).textContent = state.booking.bookingDate;
-  (document.getElementById("previewStart") as HTMLElement).textContent = times.startTime;
-  (document.getElementById("previewEnd") as HTMLElement).textContent = times.endTime;
 
   if (duration === 'Open Time') {
+    if (priceLabel) priceLabel.textContent = 'Rate / Hour';
     (document.getElementById("previewPrice") as HTMLElement).textContent = `₱${amount.toFixed(2)}/hr`;
     openTimeNote?.classList.remove("hidden");
+    timeGrid?.classList.add("hidden");
   } else {
+    if (priceLabel) priceLabel.textContent = 'Total';
     (document.getElementById("previewPrice") as HTMLElement).textContent = `₱${amount.toFixed(2)}`;
     openTimeNote?.classList.add("hidden");
+    timeGrid?.classList.remove("hidden");
+    (document.getElementById("previewStart") as HTMLElement).textContent = times.startTime;
+    (document.getElementById("previewEnd") as HTMLElement).textContent = times.endTime;
   }
 
   if (window.lucide) lucide.createIcons();
@@ -90,7 +116,6 @@ export function selectPaymentMethod(method: 'cash' | 'online'): void {
   state.paymentMethod = method;
   const cashBtn = document.getElementById("payMethodCash") as HTMLElement;
   const onlineBtn = document.getElementById("payMethodOnline") as HTMLElement;
-  const onlineNote = document.getElementById("onlinePayNote") as HTMLElement;
   const btnLabel = document.getElementById("btnConfirmLabel") as HTMLElement;
 
   const active = ['border-brand-primary', 'bg-brand-primary/10', 'text-brand-primary'];
@@ -99,14 +124,14 @@ export function selectPaymentMethod(method: 'cash' | 'online'): void {
   if (method === 'cash') {
     cashBtn.classList.remove(...inactive); cashBtn.classList.add(...active);
     onlineBtn.classList.remove(...active); onlineBtn.classList.add(...inactive);
-    onlineNote?.classList.add("hidden");
     if (btnLabel) btnLabel.innerHTML = 'Confirm &amp; Book';
   } else {
     onlineBtn.classList.remove(...inactive); onlineBtn.classList.add(...active);
     cashBtn.classList.remove(...active); cashBtn.classList.add(...inactive);
-    onlineNote?.classList.remove("hidden");
     if (btnLabel) btnLabel.textContent = 'Pay Online →';
   }
+
+  updateOnlineNoteVisibility();
 }
 
 export async function initiateCheckout(): Promise<void> {
@@ -134,11 +159,6 @@ export async function initiateCheckout(): Promise<void> {
     amount = Math.round(hours * rate * 100) / 100;
   }
 
-  if (state.paymentMethod === 'online' && duration === 'Open Time') {
-    showFormError("Online payment is not available for Open Time. Please use Cash or choose a fixed duration.");
-    return;
-  }
-
   const times = computeSessionTimes(hours, duration);
   const refNumber = Math.random().toString(36).substring(2, 10).toUpperCase();
   const durationLabel = duration === 'Custom' ? `${hours} Hour${hours !== 1 ? 's' : ''} (Custom)` : duration;
@@ -155,7 +175,9 @@ export async function initiateCheckout(): Promise<void> {
     timestamp: new Date().toISOString()
   };
 
-  if (state.paymentMethod === 'online') {
+  // Online payment for fixed durations → Xendit flow
+  // Open Time + Online OR Cash → direct Firebase flow
+  if (state.paymentMethod === 'online' && duration !== 'Open Time') {
     await initiateOnlinePayment(sessionData);
   } else {
     await initiateCashCheckout(sessionData);
@@ -166,17 +188,17 @@ async function initiateCashCheckout(sessionData: SessionRecord): Promise<void> {
   const db = getDb();
   try {
     showLoader("Processing...", "Creating your WiFi session...");
-    const data = { ...sessionData, status: 'PENDING SESSION' as const, paymentMethod: 'CASH' as const };
+    const payMethod = state.paymentMethod === 'online' ? 'ONLINE' : 'CASH';
+    const data: SessionRecord = { ...sessionData, status: 'PENDING SESSION', paymentMethod: payMethod };
     if (db) {
       await db.ref('sessions/' + data.referenceNumber).set(data);
+      hideLoader();
       showTicketModal(data);
-      resetBookingState();
     }
   } catch (error) {
     console.error("Checkout Error:", error);
-    alert("Checkout failed. Check your internet connection.");
-  } finally {
     hideLoader();
+    alert("Checkout failed. Check your internet connection.");
   }
 }
 
