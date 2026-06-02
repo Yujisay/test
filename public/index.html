@@ -543,6 +543,86 @@
     </div>
   </div>
 
+  <!-- Extend Session Modal -->
+  <div id="extendSessionModal" class="fixed inset-0 bg-brand-dark/20 backdrop-blur-md z-40 flex items-center justify-center hidden animate-fade-in">
+    <div class="bg-brand-surface border border-brand-border rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl mx-4">
+      <div class="bg-brand-primary p-5 text-white relative">
+        <div class="absolute top-4 right-4">
+          <button id="btnCloseExtend" class="w-7 h-7 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
+            <i data-lucide="x" class="w-4 h-4 text-white"></i>
+          </button>
+        </div>
+        <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-3">
+          <i data-lucide="clock-arrow-up" class="w-6 h-6"></i>
+        </div>
+        <h3 id="extendModalTitle" class="text-base font-extrabold font-['Outfit'] text-center">Extend Your Session</h3>
+        <p id="extendModalSubtitle" class="text-xs text-brand-secondary text-center mt-0.5">Add more time to your current session.</p>
+      </div>
+      <div class="p-5 space-y-4">
+        <!-- Rate note -->
+        <p id="extendRateNote" class="text-[11px] text-brand-neutral text-center font-medium"></p>
+
+        <!-- Duration options -->
+        <div class="grid grid-cols-2 gap-2">
+          <label class="extend-option cursor-pointer">
+            <input type="radio" name="extendDuration" value="0.5" class="sr-only" onchange="updateExtendPreview()">
+            <div class="p-3 rounded-xl border-2 border-brand-border bg-brand-light text-center hover:border-brand-primary transition-all extend-label">
+              <span class="text-sm font-bold text-brand-dark block">30 min</span>
+              <span class="text-[10px] text-brand-neutral">Quick top-up</span>
+            </div>
+          </label>
+          <label class="extend-option cursor-pointer">
+            <input type="radio" name="extendDuration" value="1" class="sr-only" onchange="updateExtendPreview()">
+            <div class="p-3 rounded-xl border-2 border-brand-border bg-brand-light text-center hover:border-brand-primary transition-all extend-label">
+              <span class="text-sm font-bold text-brand-dark block">1 hour</span>
+              <span class="text-[10px] text-brand-neutral">Most popular</span>
+            </div>
+          </label>
+          <label class="extend-option cursor-pointer">
+            <input type="radio" name="extendDuration" value="2" class="sr-only" onchange="updateExtendPreview()">
+            <div class="p-3 rounded-xl border-2 border-brand-border bg-brand-light text-center hover:border-brand-primary transition-all extend-label">
+              <span class="text-sm font-bold text-brand-dark block">2 hours</span>
+              <span class="text-[10px] text-brand-neutral">More time</span>
+            </div>
+          </label>
+          <label class="extend-option cursor-pointer">
+            <input type="radio" name="extendDuration" value="3" class="sr-only" onchange="updateExtendPreview()">
+            <div class="p-3 rounded-xl border-2 border-brand-border bg-brand-light text-center hover:border-brand-primary transition-all extend-label">
+              <span class="text-sm font-bold text-brand-dark block">3 hours</span>
+              <span class="text-[10px] text-brand-neutral">Extended stay</span>
+            </div>
+          </label>
+        </div>
+
+        <!-- Cost preview -->
+        <div class="p-4 bg-brand-light border border-brand-border rounded-2xl flex items-center justify-between">
+          <div>
+            <span class="text-[10px] text-brand-neutral uppercase font-bold block">Extension</span>
+            <span id="extendDurationLabel" class="text-sm font-bold text-brand-dark">+1 hour</span>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] text-brand-neutral uppercase font-bold block">Amount</span>
+            <span id="extendCostPreview" class="text-xl font-black font-['Outfit'] text-brand-primary">₱0.00</span>
+          </div>
+        </div>
+
+        <!-- Payment buttons -->
+        <div class="grid grid-cols-2 gap-3 pt-1">
+          <button id="btnExtendPayCash"
+            class="py-3.5 px-3 rounded-2xl font-bold font-['Outfit'] text-sm bg-brand-secondary hover:bg-brand-secondary/80 text-brand-dark flex items-center justify-center gap-2 transition-all border border-brand-border">
+            <i data-lucide="wallet" class="w-4 h-4"></i>
+            Cash
+          </button>
+          <button id="btnExtendPayOnline"
+            class="py-3.5 px-3 rounded-2xl font-bold font-['Outfit'] text-sm bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
+            <i data-lucide="credit-card" class="w-4 h-4"></i>
+            Online
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Sales Report Modal -->
   <div id="salesReportModal" class="fixed inset-0 bg-brand-dark/20 backdrop-blur-md z-40 flex items-center justify-center hidden animate-fade-in">
     <div class="bg-brand-surface border border-brand-border rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl mx-4">

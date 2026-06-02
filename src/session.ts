@@ -5,12 +5,19 @@ import { showLoader, hideLoader } from './ui';
 
 let countdownInterval: ReturnType<typeof setInterval> | null = null;
 let elapsedInterval: ReturnType<typeof setInterval> | null = null;
+let autoExpireHandled = false;
+let currentViewingRecord: SessionRecord | null = null;
 
 export let stopSessionData: {
   refNum: string;
   record: SessionRecord;
   finalAmount: number;
   timeLabel: string;
+} | null = null;
+
+export let extendData: {
+  refNum: string;
+  record: SessionRecord;
 } | null = null;
 
 function clearCountdown(): void {
@@ -30,8 +37,24 @@ function parseSessionTime(timeStr: string): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
 }
 
+function addHoursToTimeString(timeStr: string, hours: number): string {
+  const date = parseSessionTime(timeStr);
+  const newDate = new Date(date.getTime() + hours * 60 * 60 * 1000);
+  return newDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+async function autoExpireAndOfferExtend(record: SessionRecord): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  try {
+    await db.ref('sessions/' + record.referenceNumber).update({ status: 'EXPIRED' });
+  } catch (e) { /* ignore if already expired */ }
+  openExtendModal(record.referenceNumber, record, true);
+}
+
 function startCountdown(endTime: string): void {
   clearCountdown();
+  autoExpireHandled = false;
 
   function tick() {
     const end = parseSessionTime(endTime);
@@ -44,6 +67,10 @@ function startCountdown(endTime: string): void {
       countdownEl.textContent = '00:00';
       warningEl?.classList.remove('hidden');
       clearCountdown();
+      if (!autoExpireHandled && currentViewingRecord) {
+        autoExpireHandled = true;
+        autoExpireAndOfferExtend(currentViewingRecord);
+      }
       return;
     }
 
@@ -115,6 +142,9 @@ export async function checkSessionStatus(): Promise<void> {
 }
 
 export function renderSessionCard(record: SessionRecord): void {
+  currentViewingRecord = record;
+  autoExpireHandled = false;
+
   const resultsDiv = document.getElementById("checkResultContainer") as HTMLElement;
   const statusColor = record.status === 'ACTIVE'
     ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
@@ -124,17 +154,18 @@ export function renderSessionCard(record: SessionRecord): void {
 
   const isOpenTime = record.duration === 'Open Time' || record.duration.startsWith('Open Time');
   const isActive = record.status === 'ACTIVE';
+  const isExpired = record.status === 'EXPIRED';
   const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
   const amountDisplay = isOpenTime && isActive
     ? `₱${rate}/hr` : `₱${Number(record.amount).toFixed(2)}`;
 
-  // Countdown / elapsed section
+  // Countdown / elapsed / action section
   let timerSection = '';
   if (isActive && !isOpenTime && record.endTime) {
     timerSection = `
       <div id="sessionWarningBanner" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-xs font-semibold text-rose-700 animate-pulse">
         <i data-lucide="alarm-clock" class="w-4 h-4 shrink-0"></i>
-        <span>Your session is almost over! Please prepare to wrap up.</span>
+        <span>Your session is almost over! Please prepare to wrap up or extend.</span>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
@@ -149,7 +180,11 @@ export function renderSessionCard(record: SessionRecord): void {
       <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
         <span class="text-[10px] text-emerald-700 uppercase font-bold block mb-1">Time Remaining</span>
         <span id="sessionCountdown" class="text-3xl font-extrabold font-['Outfit'] text-emerald-700 block digital-clock">--:--</span>
-      </div>`;
+      </div>
+      <button data-ref="${record.referenceNumber}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/30 text-brand-primary flex items-center justify-center gap-2 transition-all">
+        <i data-lucide="clock-arrow-up" class="w-4 h-4"></i>
+        Extend Session
+      </button>`;
   } else if (isActive && isOpenTime) {
     timerSection = `
       <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
@@ -160,6 +195,16 @@ export function renderSessionCard(record: SessionRecord): void {
       <button data-ref="${record.referenceNumber}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
         <i data-lucide="timer-off" class="w-4 h-4"></i>
         Stop My Session
+      </button>`;
+  } else if (isExpired && !isOpenTime) {
+    timerSection = `
+      <div class="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-center">
+        <span class="text-[10px] text-rose-600 uppercase font-bold block mb-1">Session Ended</span>
+        <span class="text-sm font-semibold text-rose-700">Your time is up.</span>
+      </div>
+      <button data-ref="${record.referenceNumber}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
+        <i data-lucide="clock-arrow-up" class="w-4 h-4"></i>
+        Extend &amp; Continue
       </button>`;
   } else {
     timerSection = `
@@ -200,7 +245,6 @@ export function renderSessionCard(record: SessionRecord): void {
 
   if (window.lucide) lucide.createIcons();
 
-  // Start timers after DOM is updated
   if (isActive && !isOpenTime && record.endTime) {
     setTimeout(() => startCountdown(record.endTime), 50);
   } else if (isActive && isOpenTime && record.timestamp) {
@@ -217,7 +261,7 @@ export function renderNoRecordFound(name: string): void {
       </div>
       <div>
         <h4 class="text-sm font-bold text-brand-dark">No Record Found</h4>
-        <p class="text-xs text-brand-neutral mt-1">No active session found for "<strong>${name}</strong>".</p>
+        <p class="text-xs text-brand-neutral mt-1">No session found for "<strong>${name}</strong>".</p>
       </div>
       <button id="btnRetrySearch" class="mt-2 px-4 py-2 text-xs font-bold rounded-lg bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Try Again</button>
     </div>
@@ -227,10 +271,107 @@ export function renderNoRecordFound(name: string): void {
 
 export function clearSearchLookup(): void {
   clearCountdown();
+  currentViewingRecord = null;
   (document.getElementById("searchName") as HTMLInputElement).value = "";
   (document.getElementById("checkResultContainer") as HTMLElement).classList.add("hidden");
   (document.getElementById("checkEmptyState") as HTMLElement).classList.remove("hidden");
 }
+
+// ─── Extend session ───────────────────────────────────────────────────────────
+
+export function openExtendModal(refNum: string, record: SessionRecord, isExpired = false): void {
+  extendData = { refNum, record };
+  const titleEl = document.getElementById('extendModalTitle');
+  const subtitleEl = document.getElementById('extendModalSubtitle');
+  if (titleEl) titleEl.textContent = isExpired ? 'Time\'s Up! Extend?' : 'Extend Your Session';
+  if (subtitleEl) subtitleEl.textContent = isExpired
+    ? 'Your session has ended. Pay to extend and keep your seat.'
+    : 'Add more time to your current session.';
+
+  // Default to 1 hour selected
+  const defaultRadio = document.querySelector('input[name="extendDuration"][value="1"]') as HTMLInputElement;
+  if (defaultRadio) defaultRadio.checked = true;
+
+  updateExtendCostPreview();
+  (document.getElementById('extendSessionModal') as HTMLElement).classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+export function closeExtendModal(): void {
+  (document.getElementById('extendSessionModal') as HTMLElement).classList.add('hidden');
+  extendData = null;
+}
+
+export function updateExtendCostPreview(): void {
+  if (!extendData) return;
+  const { record } = extendData;
+  const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+  const selected = document.querySelector('input[name="extendDuration"]:checked') as HTMLInputElement;
+  const hours = selected ? parseFloat(selected.value) : 1;
+  const cost = Math.round(hours * rate * 100) / 100;
+  const label = hours === 0.5 ? '30 minutes' : `${hours} hour${hours > 1 ? 's' : ''}`;
+
+  const costEl = document.getElementById('extendCostPreview');
+  const labelEl = document.getElementById('extendDurationLabel');
+  const rateEl = document.getElementById('extendRateNote');
+
+  if (costEl) costEl.textContent = `₱${cost.toFixed(2)}`;
+  if (labelEl) labelEl.textContent = `+${label}`;
+  if (rateEl) rateEl.textContent = `₱${rate}/hr — ${record.seatType}`;
+}
+
+export async function confirmExtendCash(): Promise<void> {
+  if (!extendData) return;
+  const { refNum, record } = extendData;
+  const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+  const selected = document.querySelector('input[name="extendDuration"]:checked') as HTMLInputElement;
+  const hours = selected ? parseFloat(selected.value) : 1;
+  const cost = Math.round(hours * rate * 100) / 100;
+  const hoursLabel = hours === 0.5 ? '30 min' : `${hours}hr`;
+
+  closeExtendModal();
+  alert(`Extension Request — Ref#: ${refNum}\n\nDuration: +${hoursLabel}\nAmount due: ₱${cost.toFixed(2)}\n\nPlease proceed to the cashier desk and show this reference number. The cashier will extend your session once payment is received.`);
+}
+
+export async function confirmExtendOnline(): Promise<void> {
+  if (!extendData) return;
+  const { refNum, record } = extendData;
+  const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+  const selected = document.querySelector('input[name="extendDuration"]:checked') as HTMLInputElement;
+  const hours = selected ? parseFloat(selected.value) : 1;
+  const cost = Math.round(hours * rate * 100) / 100;
+  const hoursLabel = hours === 0.5 ? '30 min' : `${hours}hr`;
+
+  try {
+    showLoader("Preparing...", "Setting up your extension payment...");
+    const res = await fetch('/api/create-extend-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        referenceNumber: refNum,
+        fullName: record.fullName,
+        seatType: record.seatType,
+        extensionHours: hours,
+        amount: cost
+      })
+    });
+    const data = await res.json();
+    hideLoader();
+
+    if (data.invoiceUrl) {
+      closeExtendModal();
+      window.location.href = data.invoiceUrl;
+    } else {
+      alert(`Could not create payment link. Please pay at the cashier desk.\n\nRef#: ${refNum}\nExtension: +${hoursLabel}\nAmount: ₱${cost.toFixed(2)}`);
+    }
+  } catch (err) {
+    hideLoader();
+    console.error("Online extend payment error:", err);
+    alert("Payment link creation failed. Please pay at the cashier instead.");
+  }
+}
+
+// ─── Stop Open Time session ───────────────────────────────────────────────────
 
 export async function stopOpenTimeSession(refNum: string): Promise<void> {
   const db = getDb();

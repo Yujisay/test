@@ -40,6 +40,20 @@ function getBaseUrl(req: Request): string {
   return `${proto}://${host}`;
 }
 
+function addHoursToTimeString(timeStr: string, hours: number): string {
+  const now = new Date();
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return timeStr;
+  let h = parseInt(match[1]);
+  const m = parseInt(match[2]);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && h !== 12) h += 12;
+  if (period === 'AM' && h === 12) h = 0;
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+  const newDate = new Date(date.getTime() + hours * 60 * 60 * 1000);
+  return newDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
 app.post('/api/create-payment', async (req: Request, res: Response) => {
   try {
     const { referenceNumber, fullName, seatType, duration, amount, hourlyRate, bookingDate, startTime, endTime } = req.body;
@@ -89,7 +103,7 @@ app.post('/api/create-payment', async (req: Request, res: Response) => {
   }
 });
 
-// Stop-payment: create Xendit invoice for Open Time final billing (session already marked EXPIRED)
+// Stop-payment: create Xendit invoice for Open Time final billing
 app.post('/api/create-stop-payment', async (req: Request, res: Response) => {
   try {
     const { referenceNumber, fullName, seatType, duration, amount } = req.body;
@@ -122,7 +136,6 @@ app.post('/api/create-stop-payment', async (req: Request, res: Response) => {
 
     const invoice = xenditRes.data;
 
-    // Record the stop invoice URL on the session for reference
     await firebaseUpdate(`sessions/${referenceNumber}`, {
       xenditStopInvoiceUrl: invoice.invoice_url,
       xenditStopInvoiceId: invoice.id
@@ -132,6 +145,58 @@ app.post('/api/create-stop-payment', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Create stop payment error:', err?.response?.data || err.message);
     res.status(500).json({ error: 'Failed to create stop payment link.' });
+  }
+});
+
+// Extend-payment: create Xendit invoice for session extension
+app.post('/api/create-extend-payment', async (req: Request, res: Response) => {
+  try {
+    const { referenceNumber, fullName, seatType, extensionHours, amount } = req.body;
+
+    if (!referenceNumber || !fullName || !amount || !extensionHours) {
+      return res.status(400).json({ error: 'Missing required fields.' });
+    }
+
+    const baseUrl = getBaseUrl(req);
+    const extRef = `${referenceNumber}-EXT`;
+    const hoursLabel = extensionHours === 0.5 ? '30 min' : `${extensionHours}hr`;
+
+    const invoicePayload = {
+      external_id: extRef,
+      payer_email: `${fullName.toLowerCase().replace(/\s+/g, '.')}@studyhub.local`,
+      description: `Study Hub WiFi — ${seatType} Extension (+${hoursLabel})`,
+      amount: Math.round(amount),
+      currency: 'PHP',
+      customer: { given_names: fullName },
+      customer_notification_preference: { invoice_paid: [] },
+      success_redirect_url: `${baseUrl}/payment-success.html?ref=${referenceNumber}&tab=check&extended=1`,
+      failure_redirect_url: `${baseUrl}/payment-failed.html?ref=${referenceNumber}`,
+      items: [{ name: `${seatType} — Extension (+${hoursLabel})`, quantity: 1, price: Math.round(amount), category: 'WiFi Access' }]
+    };
+
+    const xenditRes = await axios.post(
+      'https://api.xendit.co/v2/invoices',
+      invoicePayload,
+      { auth: { username: XENDIT_SECRET_KEY, password: '' }, headers: { 'Content-Type': 'application/json' } }
+    );
+
+    const invoice = xenditRes.data;
+
+    // Store pending extension info so webhook knows what to do
+    const currentSession = await firebaseGet(`sessions/${referenceNumber}`);
+    await firebaseUpdate(`sessions/${referenceNumber}`, {
+      pendingExtension: {
+        hours: extensionHours,
+        amount: amount,
+        currentEndTime: currentSession?.endTime || '',
+        invoiceId: invoice.id
+      }
+    });
+
+    res.json({ success: true, invoiceUrl: invoice.invoice_url });
+  } catch (err: any) {
+    console.error('Create extend payment error:', err?.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to create extension payment link.' });
   }
 });
 
@@ -147,17 +212,40 @@ app.post('/api/xendit-webhook', async (req: Request, res: Response) => {
     console.log('Xendit webhook received:', event.status, event.external_id);
 
     if (event.status === 'PAID' || event.status === 'SETTLED') {
-      // Handle stop-payment invoices (external_id ends with -STOP)
       const externalId: string = event.external_id || '';
       const isStopPayment = externalId.endsWith('-STOP');
-      const sessionRef = isStopPayment ? externalId.replace(/-STOP$/, '') : externalId;
+      const isExtendPayment = externalId.endsWith('-EXT');
+      const sessionRef = isStopPayment
+        ? externalId.replace(/-STOP$/, '')
+        : isExtendPayment
+          ? externalId.replace(/-EXT$/, '')
+          : externalId;
 
-      // Get current session status to avoid overwriting EXPIRED back to PENDING SESSION
       const currentSession = await firebaseGet(`sessions/${sessionRef}`);
       const currentStatus = currentSession?.status;
 
-      if (isStopPayment || currentStatus === 'EXPIRED') {
-        // Just confirm payment — session is already closed
+      if (isExtendPayment) {
+        // Extension paid — calculate new endTime and reactivate
+        const ext = currentSession?.pendingExtension;
+        const baseEndTime = ext?.currentEndTime || currentSession?.endTime || '';
+        const extHours = ext?.hours || 1;
+        const extAmount = ext?.amount || 0;
+        const newEndTime = baseEndTime ? addHoursToTimeString(baseEndTime, extHours) : '';
+        const newAmount = Math.round(((Number(currentSession?.amount) || 0) + extAmount) * 100) / 100;
+        const hoursLabel = extHours === 0.5 ? '30 min' : `${extHours}hr`;
+
+        await firebaseUpdate(`sessions/${sessionRef}`, {
+          status: 'ACTIVE',
+          endTime: newEndTime,
+          amount: newAmount,
+          duration: `${currentSession?.duration || ''} +${hoursLabel}`.trim(),
+          paidAt: new Date().toISOString(),
+          paymentConfirmed: true,
+          pendingExtension: null
+        });
+        console.log(`Extension confirmed for ${sessionRef} — +${hoursLabel}, new end: ${newEndTime}`);
+      } else if (isStopPayment || currentStatus === 'EXPIRED') {
+        // Stop payment — confirm amount, session already closed
         await firebaseUpdate(`sessions/${sessionRef}`, {
           paidAt: new Date().toISOString(),
           paymentConfirmed: true,
@@ -165,7 +253,7 @@ app.post('/api/xendit-webhook', async (req: Request, res: Response) => {
         });
         console.log(`Stop payment confirmed for ${sessionRef} — ₱${event.paid_amount || event.amount}`);
       } else {
-        // Normal flow: mark as ready for admin activation
+        // Normal new-booking flow
         await firebaseUpdate(`sessions/${sessionRef}`, {
           status: 'PENDING SESSION',
           paidAt: new Date().toISOString(),

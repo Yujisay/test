@@ -19,7 +19,7 @@ footer {
 
 /* Base Styles & Background Setup */
 body {
-  background-color: #FDFCFB; /* brand-light */
+  background-color: transparent;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow-y: auto;
   -webkit-tap-highlight-color: transparent;

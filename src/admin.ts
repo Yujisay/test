@@ -107,7 +107,11 @@ export function renderCurrentPage(): void {
     if (row.status === 'PENDING SESSION') {
       actionHtml = `<button data-ref="${row.referenceNumber}" class="btn-approve-session px-3 py-1 bg-brand-primary text-white rounded text-[10px] font-semibold">Approve</button>`;
     } else if (row.status === 'ACTIVE') {
-      actionHtml = `<button data-ref="${row.referenceNumber}" class="btn-end-session px-3 py-1 bg-rose-500 text-white rounded text-[10px] font-semibold">${isOpenTime ? 'End & Bill' : 'End'}</button>`;
+      actionHtml = `
+        <div class="flex flex-col gap-1">
+          <button data-ref="${row.referenceNumber}" class="btn-end-session px-3 py-1 bg-rose-500 text-white rounded text-[10px] font-semibold">${isOpenTime ? 'End & Bill' : 'End'}</button>
+          ${!isOpenTime ? `<button data-ref="${row.referenceNumber}" class="btn-admin-extend px-3 py-1 bg-brand-primary/10 border border-brand-primary/30 text-brand-primary rounded text-[10px] font-semibold whitespace-nowrap">Extend</button>` : ''}
+        </div>`;
     } else if (row.status === 'AWAITING PAYMENT') {
       actionHtml = `
         <div class="flex flex-col gap-1">
@@ -285,6 +289,58 @@ export async function endSession(refNum: string): Promise<void> {
   }
 
   await db.ref('sessions/' + refNum).update(updateData);
+}
+
+export async function extendSessionAdmin(refNum: string): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+
+  const snapshot = await db.ref('sessions/' + refNum).once('value');
+  const record = snapshot.val();
+  if (!record) return;
+
+  const options = ['0.5 — 30 minutes', '1 — 1 hour', '2 — 2 hours', '3 — 3 hours'];
+  const choice = prompt(
+    `Extend session for ${record.fullName} (${refNum})\nCurrent end time: ${record.endTime || 'N/A'}\n\nEnter hours to add:\n  0.5 = 30 min\n  1 = 1 hour\n  2 = 2 hours\n  3 = 3 hours`
+  );
+  if (!choice) return;
+  const hours = parseFloat(choice);
+  if (isNaN(hours) || hours <= 0) { alert('Invalid hours entered.'); return; }
+
+  // Calculate new end time
+  const currentEndTime = record.endTime || '';
+  let newEndTime = currentEndTime;
+  if (currentEndTime) {
+    const match = currentEndTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (match) {
+      let h = parseInt(match[1]);
+      const m = parseInt(match[2]);
+      const period = match[3].toUpperCase();
+      if (period === 'PM' && h !== 12) h += 12;
+      if (period === 'AM' && h === 12) h = 0;
+      const now = new Date();
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+      const newDate = new Date(date.getTime() + hours * 60 * 60 * 1000);
+      newEndTime = newDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+  }
+
+  const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+  const addedCost = Math.round(hours * rate * 100) / 100;
+  const newAmount = Math.round(((Number(record.amount) || 0) + addedCost) * 100) / 100;
+  const hoursLabel = hours === 0.5 ? '30 min' : `${hours}hr`;
+  const newDuration = `${record.duration} +${hoursLabel}`.trim();
+
+  if (!confirm(
+    `Extend ${refNum} by +${hoursLabel}?\n\nNew end time: ${newEndTime}\nExtra charge: ₱${addedCost.toFixed(2)}\nNew total: ₱${newAmount.toFixed(2)}`
+  )) return;
+
+  await db.ref('sessions/' + refNum).update({
+    status: 'ACTIVE',
+    endTime: newEndTime,
+    amount: newAmount,
+    duration: newDuration
+  });
 }
 
 export async function archiveOldSessions(): Promise<void> {

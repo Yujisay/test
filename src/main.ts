@@ -9,14 +9,17 @@ import {
 } from './booking';
 import {
   checkSessionStatus, clearSearchLookup,
-  stopOpenTimeSession, confirmStopCash, confirmStopOnline
+  stopOpenTimeSession, confirmStopCash, confirmStopOnline,
+  openExtendModal, closeExtendModal, updateExtendCostPreview,
+  confirmExtendCash, confirmExtendOnline, extendData
 } from './session';
 import {
   handleAdminTrigger, submitAdminAuth, unlockAdminMode, exitAdminMode,
   refreshAdminDashboard, archiveOldSessions, renderCurrentPage,
   filterAdminLogs, approveTransaction, endSession,
   markAwaitingAsPaid, cancelAwaitingPayment,
-  openSalesReportModal, closeSalesReportModal, downloadSalesReport
+  openSalesReportModal, closeSalesReportModal, downloadSalesReport,
+  extendSessionAdmin
 } from './admin';
 import { getPageSize } from './config';
 
@@ -43,6 +46,24 @@ function init(): void {
     }
 
     window.addEventListener('click', handleGlobalClicks, { capture: true, passive: false });
+
+    // Expose extend preview updater for radio onchange callbacks
+    (window as any).updateExtendPreview = () => {
+      updateExtendCostPreview();
+      // Highlight selected card
+      document.querySelectorAll('.extend-option').forEach(opt => {
+        const radio = opt.querySelector('input[type="radio"]') as HTMLInputElement;
+        const card = opt.querySelector('.extend-label') as HTMLElement;
+        if (!card) return;
+        if (radio?.checked) {
+          card.classList.add('border-brand-primary', 'bg-brand-primary/5');
+          card.classList.remove('border-brand-border', 'bg-brand-light');
+        } else {
+          card.classList.remove('border-brand-primary', 'bg-brand-primary/5');
+          card.classList.add('border-brand-border', 'bg-brand-light');
+        }
+      });
+    };
 
     setupListeners();
 
@@ -184,6 +205,33 @@ function handleGlobalClicks(e: MouseEvent): void {
   if (id === 'btnSalesReport') openSalesReportModal();
   if (id === 'btnCloseSalesReport') closeSalesReportModal();
   if (id === 'btnDownloadSalesReport') downloadSalesReport();
+
+  // Admin extend session
+  if (target.classList.contains('btn-admin-extend')) {
+    const refNum = target.getAttribute('data-ref');
+    if (refNum && state.dbConnected) extendSessionAdmin(refNum);
+    else if (!state.dbConnected) alert("Database disconnected.");
+  }
+
+  // Customer extend session (from session card button)
+  if (target.classList.contains('btn-extend-session')) {
+    const refNum = target.getAttribute('data-ref');
+    if (refNum && state.dbConnected) {
+      import('./firebase').then(({ getDb }) => {
+        const db = getDb();
+        if (!db) return;
+        db.ref('sessions/' + refNum).once('value').then((snap: any) => {
+          const rec = snap.val();
+          if (rec) openExtendModal(refNum, rec, rec.status === 'EXPIRED');
+        });
+      });
+    } else if (!state.dbConnected) alert("Database disconnected.");
+  }
+
+  // Extend session modal buttons
+  if (id === 'btnCloseExtend') closeExtendModal();
+  if (id === 'btnExtendPayCash') confirmExtendCash();
+  if (id === 'btnExtendPayOnline') confirmExtendOnline();
 
   // Customer stop session
   if (target.classList.contains('btn-customer-stop-session')) {

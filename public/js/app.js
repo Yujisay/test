@@ -1,31 +1,50 @@
 (() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __esm = (fn, res) => function __init() {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  };
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+
   // src/config.ts
-  var firebaseConfig = {
-    apiKey: "AIzaSyC6piJ_bLMZeOMZZb62PYmanilcA-JW3FM",
-    authDomain: "studyhub-f1fbe.firebaseapp.com",
-    projectId: "studyhub-f1fbe",
-    databaseURL: "https://studyhub-f1fbe-default-rtdb.asia-southeast1.firebasedatabase.app",
-    storageBucket: "studyhub-f1fbe.firebasestorage.app",
-    messagingSenderId: "466465286377",
-    appId: "1:466465286377:web:972eb3d4c45832933f6878"
-  };
-  var PRICING = {
-    "Table": { "1 Hour": 25, "3+1 Hours": 75 },
-    "Cubicle": { "1 Hour": 50, "3+1 Hours": 150 }
-  };
-  var HOURLY_RATE = {
-    "Table": 25,
-    "Cubicle": 50
-  };
-  var CLOSING_TIME = "22:00";
-  var ADMIN_PASSCODE = "admin123";
-  var PAGE_SIZE = 10;
   function getPageSize() {
     return window.innerWidth < 768 ? 5 : 10;
   }
+  var firebaseConfig, PRICING, HOURLY_RATE, CLOSING_TIME, ADMIN_PASSCODE, PAGE_SIZE;
+  var init_config = __esm({
+    "src/config.ts"() {
+      firebaseConfig = {
+        apiKey: "AIzaSyC6piJ_bLMZeOMZZb62PYmanilcA-JW3FM",
+        authDomain: "studyhub-f1fbe.firebaseapp.com",
+        projectId: "studyhub-f1fbe",
+        databaseURL: "https://studyhub-f1fbe-default-rtdb.asia-southeast1.firebasedatabase.app",
+        storageBucket: "studyhub-f1fbe.firebasestorage.app",
+        messagingSenderId: "466465286377",
+        appId: "1:466465286377:web:972eb3d4c45832933f6878"
+      };
+      PRICING = {
+        "Table": { "1 Hour": 25, "3+1 Hours": 75 },
+        "Cubicle": { "1 Hour": 50, "3+1 Hours": 150 }
+      };
+      HOURLY_RATE = {
+        "Table": 25,
+        "Cubicle": 50
+      };
+      CLOSING_TIME = "22:00";
+      ADMIN_PASSCODE = "admin123";
+      PAGE_SIZE = 10;
+    }
+  });
 
   // src/firebase.ts
-  var db = null;
+  var firebase_exports = {};
+  __export(firebase_exports, {
+    getDb: () => getDb,
+    initFirebase: () => initFirebase
+  });
   function initFirebase() {
     try {
       if (window.firebase) {
@@ -43,8 +62,19 @@
   function getDb() {
     return db;
   }
+  var db;
+  var init_firebase = __esm({
+    "src/firebase.ts"() {
+      init_config();
+      db = null;
+    }
+  });
+
+  // src/main.ts
+  init_firebase();
 
   // src/state.ts
+  init_config();
   var state = {
     currentTab: "avail",
     paymentMethod: "cash",
@@ -72,6 +102,7 @@
   };
 
   // src/ui.ts
+  init_config();
   var currentTicketRecord = null;
   function showLoader(title, msg) {
     document.getElementById("loadingTitle").innerText = title;
@@ -259,6 +290,8 @@
   }
 
   // src/booking.ts
+  init_config();
+  init_firebase();
   function computeSessionTimes(hours, duration) {
     const now = /* @__PURE__ */ new Date();
     const minutes = now.getMinutes();
@@ -481,9 +514,14 @@
   }
 
   // src/session.ts
+  init_config();
+  init_firebase();
   var countdownInterval = null;
   var elapsedInterval = null;
+  var autoExpireHandled = false;
+  var currentViewingRecord = null;
   var stopSessionData = null;
+  var extendData = null;
   function clearCountdown() {
     if (countdownInterval !== null) {
       clearInterval(countdownInterval);
@@ -505,8 +543,18 @@
     if (period === "AM" && h === 12) h = 0;
     return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
   }
+  async function autoExpireAndOfferExtend(record) {
+    const db2 = getDb();
+    if (!db2) return;
+    try {
+      await db2.ref("sessions/" + record.referenceNumber).update({ status: "EXPIRED" });
+    } catch (e) {
+    }
+    openExtendModal(record.referenceNumber, record, true);
+  }
   function startCountdown(endTime) {
     clearCountdown();
+    autoExpireHandled = false;
     function tick() {
       const end = parseSessionTime(endTime);
       const remaining = end.getTime() - Date.now();
@@ -520,6 +568,10 @@
         countdownEl.textContent = "00:00";
         warningEl?.classList.remove("hidden");
         clearCountdown();
+        if (!autoExpireHandled && currentViewingRecord) {
+          autoExpireHandled = true;
+          autoExpireAndOfferExtend(currentViewingRecord);
+        }
         return;
       }
       const totalSecs = Math.floor(remaining / 1e3);
@@ -581,10 +633,13 @@
     }
   }
   function renderSessionCard(record) {
+    currentViewingRecord = record;
+    autoExpireHandled = false;
     const resultsDiv = document.getElementById("checkResultContainer");
     const statusColor = record.status === "ACTIVE" ? "text-emerald-600 bg-emerald-50 border-emerald-200" : record.status === "PENDING SESSION" ? "text-amber-600 bg-amber-50 border-amber-200" : "text-brand-neutral bg-brand-light border-brand-border";
     const isOpenTime = record.duration === "Open Time" || record.duration.startsWith("Open Time");
     const isActive = record.status === "ACTIVE";
+    const isExpired = record.status === "EXPIRED";
     const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
     const amountDisplay = isOpenTime && isActive ? `\u20B1${rate}/hr` : `\u20B1${Number(record.amount).toFixed(2)}`;
     let timerSection = "";
@@ -592,7 +647,7 @@
       timerSection = `
       <div id="sessionWarningBanner" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-xs font-semibold text-rose-700 animate-pulse">
         <i data-lucide="alarm-clock" class="w-4 h-4 shrink-0"></i>
-        <span>Your session is almost over! Please prepare to wrap up.</span>
+        <span>Your session is almost over! Please prepare to wrap up or extend.</span>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div class="p-3 bg-brand-light rounded-xl border border-brand-border text-center">
@@ -607,7 +662,11 @@
       <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
         <span class="text-[10px] text-emerald-700 uppercase font-bold block mb-1">Time Remaining</span>
         <span id="sessionCountdown" class="text-3xl font-extrabold font-['Outfit'] text-emerald-700 block digital-clock">--:--</span>
-      </div>`;
+      </div>
+      <button data-ref="${record.referenceNumber}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/30 text-brand-primary flex items-center justify-center gap-2 transition-all">
+        <i data-lucide="clock-arrow-up" class="w-4 h-4"></i>
+        Extend Session
+      </button>`;
     } else if (isActive && isOpenTime) {
       timerSection = `
       <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
@@ -618,6 +677,16 @@
       <button data-ref="${record.referenceNumber}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
         <i data-lucide="timer-off" class="w-4 h-4"></i>
         Stop My Session
+      </button>`;
+    } else if (isExpired && !isOpenTime) {
+      timerSection = `
+      <div class="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-center">
+        <span class="text-[10px] text-rose-600 uppercase font-bold block mb-1">Session Ended</span>
+        <span class="text-sm font-semibold text-rose-700">Your time is up.</span>
+      </div>
+      <button data-ref="${record.referenceNumber}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
+        <i data-lucide="clock-arrow-up" class="w-4 h-4"></i>
+        Extend &amp; Continue
       </button>`;
     } else {
       timerSection = `
@@ -670,7 +739,7 @@
       </div>
       <div>
         <h4 class="text-sm font-bold text-brand-dark">No Record Found</h4>
-        <p class="text-xs text-brand-neutral mt-1">No active session found for "<strong>${name}</strong>".</p>
+        <p class="text-xs text-brand-neutral mt-1">No session found for "<strong>${name}</strong>".</p>
       </div>
       <button id="btnRetrySearch" class="mt-2 px-4 py-2 text-xs font-bold rounded-lg bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Try Again</button>
     </div>
@@ -679,9 +748,96 @@
   }
   function clearSearchLookup() {
     clearCountdown();
+    currentViewingRecord = null;
     document.getElementById("searchName").value = "";
     document.getElementById("checkResultContainer").classList.add("hidden");
     document.getElementById("checkEmptyState").classList.remove("hidden");
+  }
+  function openExtendModal(refNum, record, isExpired = false) {
+    extendData = { refNum, record };
+    const titleEl = document.getElementById("extendModalTitle");
+    const subtitleEl = document.getElementById("extendModalSubtitle");
+    if (titleEl) titleEl.textContent = isExpired ? "Time's Up! Extend?" : "Extend Your Session";
+    if (subtitleEl) subtitleEl.textContent = isExpired ? "Your session has ended. Pay to extend and keep your seat." : "Add more time to your current session.";
+    const defaultRadio = document.querySelector('input[name="extendDuration"][value="1"]');
+    if (defaultRadio) defaultRadio.checked = true;
+    updateExtendCostPreview();
+    document.getElementById("extendSessionModal").classList.remove("hidden");
+    if (window.lucide) lucide.createIcons();
+  }
+  function closeExtendModal() {
+    document.getElementById("extendSessionModal").classList.add("hidden");
+    extendData = null;
+  }
+  function updateExtendCostPreview() {
+    if (!extendData) return;
+    const { record } = extendData;
+    const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+    const selected = document.querySelector('input[name="extendDuration"]:checked');
+    const hours = selected ? parseFloat(selected.value) : 1;
+    const cost = Math.round(hours * rate * 100) / 100;
+    const label = hours === 0.5 ? "30 minutes" : `${hours} hour${hours > 1 ? "s" : ""}`;
+    const costEl = document.getElementById("extendCostPreview");
+    const labelEl = document.getElementById("extendDurationLabel");
+    const rateEl = document.getElementById("extendRateNote");
+    if (costEl) costEl.textContent = `\u20B1${cost.toFixed(2)}`;
+    if (labelEl) labelEl.textContent = `+${label}`;
+    if (rateEl) rateEl.textContent = `\u20B1${rate}/hr \u2014 ${record.seatType}`;
+  }
+  async function confirmExtendCash() {
+    if (!extendData) return;
+    const { refNum, record } = extendData;
+    const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+    const selected = document.querySelector('input[name="extendDuration"]:checked');
+    const hours = selected ? parseFloat(selected.value) : 1;
+    const cost = Math.round(hours * rate * 100) / 100;
+    const hoursLabel = hours === 0.5 ? "30 min" : `${hours}hr`;
+    closeExtendModal();
+    alert(`Extension Request \u2014 Ref#: ${refNum}
+
+Duration: +${hoursLabel}
+Amount due: \u20B1${cost.toFixed(2)}
+
+Please proceed to the cashier desk and show this reference number. The cashier will extend your session once payment is received.`);
+  }
+  async function confirmExtendOnline() {
+    if (!extendData) return;
+    const { refNum, record } = extendData;
+    const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+    const selected = document.querySelector('input[name="extendDuration"]:checked');
+    const hours = selected ? parseFloat(selected.value) : 1;
+    const cost = Math.round(hours * rate * 100) / 100;
+    const hoursLabel = hours === 0.5 ? "30 min" : `${hours}hr`;
+    try {
+      showLoader("Preparing...", "Setting up your extension payment...");
+      const res = await fetch("/api/create-extend-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          referenceNumber: refNum,
+          fullName: record.fullName,
+          seatType: record.seatType,
+          extensionHours: hours,
+          amount: cost
+        })
+      });
+      const data = await res.json();
+      hideLoader();
+      if (data.invoiceUrl) {
+        closeExtendModal();
+        window.location.href = data.invoiceUrl;
+      } else {
+        alert(`Could not create payment link. Please pay at the cashier desk.
+
+Ref#: ${refNum}
+Extension: +${hoursLabel}
+Amount: \u20B1${cost.toFixed(2)}`);
+      }
+    } catch (err) {
+      hideLoader();
+      console.error("Online extend payment error:", err);
+      alert("Payment link creation failed. Please pay at the cashier instead.");
+    }
   }
   async function stopOpenTimeSession(refNum) {
     const db2 = getDb();
@@ -780,6 +936,8 @@ Please proceed to the cashier desk to complete your payment.`);
   }
 
   // src/admin.ts
+  init_config();
+  init_firebase();
   function handleAdminTrigger() {
     adminState.clickCount++;
     if (adminState.clickTimer) clearTimeout(adminState.clickTimer);
@@ -871,7 +1029,11 @@ Please proceed to the cashier desk to complete your payment.`);
       if (row.status === "PENDING SESSION") {
         actionHtml = `<button data-ref="${row.referenceNumber}" class="btn-approve-session px-3 py-1 bg-brand-primary text-white rounded text-[10px] font-semibold">Approve</button>`;
       } else if (row.status === "ACTIVE") {
-        actionHtml = `<button data-ref="${row.referenceNumber}" class="btn-end-session px-3 py-1 bg-rose-500 text-white rounded text-[10px] font-semibold">${isOpenTime ? "End & Bill" : "End"}</button>`;
+        actionHtml = `
+        <div class="flex flex-col gap-1">
+          <button data-ref="${row.referenceNumber}" class="btn-end-session px-3 py-1 bg-rose-500 text-white rounded text-[10px] font-semibold">${isOpenTime ? "End & Bill" : "End"}</button>
+          ${!isOpenTime ? `<button data-ref="${row.referenceNumber}" class="btn-admin-extend px-3 py-1 bg-brand-primary/10 border border-brand-primary/30 text-brand-primary rounded text-[10px] font-semibold whitespace-nowrap">Extend</button>` : ""}
+        </div>`;
       } else if (row.status === "AWAITING PAYMENT") {
         actionHtml = `
         <div class="flex flex-col gap-1">
@@ -1018,6 +1180,64 @@ Time used: ${hrs > 0 ? hrs + "h " : ""}${mins > 0 ? mins + "m" : ""}.
 Total amount due: \u20B1${finalAmount.toFixed(2)}`);
     }
     await db2.ref("sessions/" + refNum).update(updateData);
+  }
+  async function extendSessionAdmin(refNum) {
+    const db2 = getDb();
+    if (!db2) return;
+    const snapshot = await db2.ref("sessions/" + refNum).once("value");
+    const record = snapshot.val();
+    if (!record) return;
+    const options = ["0.5 \u2014 30 minutes", "1 \u2014 1 hour", "2 \u2014 2 hours", "3 \u2014 3 hours"];
+    const choice = prompt(
+      `Extend session for ${record.fullName} (${refNum})
+Current end time: ${record.endTime || "N/A"}
+
+Enter hours to add:
+  0.5 = 30 min
+  1 = 1 hour
+  2 = 2 hours
+  3 = 3 hours`
+    );
+    if (!choice) return;
+    const hours = parseFloat(choice);
+    if (isNaN(hours) || hours <= 0) {
+      alert("Invalid hours entered.");
+      return;
+    }
+    const currentEndTime = record.endTime || "";
+    let newEndTime = currentEndTime;
+    if (currentEndTime) {
+      const match = currentEndTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (match) {
+        let h = parseInt(match[1]);
+        const m = parseInt(match[2]);
+        const period = match[3].toUpperCase();
+        if (period === "PM" && h !== 12) h += 12;
+        if (period === "AM" && h === 12) h = 0;
+        const now = /* @__PURE__ */ new Date();
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+        const newDate = new Date(date.getTime() + hours * 60 * 60 * 1e3);
+        newEndTime = newDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+      }
+    }
+    const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
+    const addedCost = Math.round(hours * rate * 100) / 100;
+    const newAmount = Math.round(((Number(record.amount) || 0) + addedCost) * 100) / 100;
+    const hoursLabel = hours === 0.5 ? "30 min" : `${hours}hr`;
+    const newDuration = `${record.duration} +${hoursLabel}`.trim();
+    if (!confirm(
+      `Extend ${refNum} by +${hoursLabel}?
+
+New end time: ${newEndTime}
+Extra charge: \u20B1${addedCost.toFixed(2)}
+New total: \u20B1${newAmount.toFixed(2)}`
+    )) return;
+    await db2.ref("sessions/" + refNum).update({
+      status: "ACTIVE",
+      endTime: newEndTime,
+      amount: newAmount,
+      duration: newDuration
+    });
   }
   async function archiveOldSessions() {
     const db2 = getDb();
@@ -1298,6 +1518,7 @@ This permanently removes them from the database.`)) return;
   }
 
   // src/main.ts
+  init_config();
   console.log("Study Hub Portal loading...");
   function init() {
     console.log("Study Hub Portal Initializing...");
@@ -1318,6 +1539,21 @@ This permanently removes them from the database.`)) return;
         updateConnectionStatus(false);
       }
       window.addEventListener("click", handleGlobalClicks, { capture: true, passive: false });
+      window.updateExtendPreview = () => {
+        updateExtendCostPreview();
+        document.querySelectorAll(".extend-option").forEach((opt) => {
+          const radio = opt.querySelector('input[type="radio"]');
+          const card = opt.querySelector(".extend-label");
+          if (!card) return;
+          if (radio?.checked) {
+            card.classList.add("border-brand-primary", "bg-brand-primary/5");
+            card.classList.remove("border-brand-border", "bg-brand-light");
+          } else {
+            card.classList.remove("border-brand-primary", "bg-brand-primary/5");
+            card.classList.add("border-brand-border", "bg-brand-light");
+          }
+        });
+      };
       setupListeners();
       if (localStorage.getItem("adminAuthenticated") === "true") {
         adminState.isAuthenticated = true;
@@ -1451,6 +1687,27 @@ This permanently removes them from the database.`)) return;
     if (id === "btnSalesReport") openSalesReportModal();
     if (id === "btnCloseSalesReport") closeSalesReportModal();
     if (id === "btnDownloadSalesReport") downloadSalesReport();
+    if (target.classList.contains("btn-admin-extend")) {
+      const refNum = target.getAttribute("data-ref");
+      if (refNum && state.dbConnected) extendSessionAdmin(refNum);
+      else if (!state.dbConnected) alert("Database disconnected.");
+    }
+    if (target.classList.contains("btn-extend-session")) {
+      const refNum = target.getAttribute("data-ref");
+      if (refNum && state.dbConnected) {
+        Promise.resolve().then(() => (init_firebase(), firebase_exports)).then(({ getDb: getDb2 }) => {
+          const db2 = getDb2();
+          if (!db2) return;
+          db2.ref("sessions/" + refNum).once("value").then((snap) => {
+            const rec = snap.val();
+            if (rec) openExtendModal(refNum, rec, rec.status === "EXPIRED");
+          });
+        });
+      } else if (!state.dbConnected) alert("Database disconnected.");
+    }
+    if (id === "btnCloseExtend") closeExtendModal();
+    if (id === "btnExtendPayCash") confirmExtendCash();
+    if (id === "btnExtendPayOnline") confirmExtendOnline();
     if (target.classList.contains("btn-customer-stop-session")) {
       const refNum = target.getAttribute("data-ref");
       if (refNum && state.dbConnected) stopOpenTimeSession(refNum);
