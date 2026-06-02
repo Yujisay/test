@@ -23,6 +23,7 @@ export function showFormError(msg: string): void {
 
 export function switchTab(tabId: 'avail' | 'check'): void {
   state.currentTab = tabId;
+  localStorage.setItem('activeTab', tabId);
   const btnAvail = document.getElementById("tabAvail") as HTMLElement;
   const btnCheck = document.getElementById("tabCheck") as HTMLElement;
   const secAvail = document.getElementById("sectionAvail") as HTMLElement;

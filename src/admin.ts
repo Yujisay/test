@@ -230,11 +230,45 @@ export function filterAdminLogs(): void {
   renderCurrentPage();
 }
 
+function parseDurationHours(duration: string): number {
+  if (!duration || duration === 'Open Time') return 0;
+  const hourMatch = duration.match(/(\d+(?:\.\d+)?)\s*h/i);
+  const minMatch = duration.match(/(\d+(?:\.\d+)?)\s*m/i);
+  if (hourMatch) return parseFloat(hourMatch[1]);
+  if (minMatch) return parseFloat(minMatch[1]) / 60;
+  return 1;
+}
+
 export async function approveTransaction(refNum: string): Promise<void> {
   const db = getDb();
-  if (confirm("Approve session " + refNum + "?") && db) {
-    await db.ref('sessions/' + refNum).update({ status: 'ACTIVE' });
+  if (!db) return;
+
+  const snapshot = await db.ref('sessions/' + refNum).once('value');
+  const record = snapshot.val();
+  if (!record) return;
+
+  if (!confirm(`Approve session ${refNum} for ${record.fullName}?`)) return;
+
+  const now = new Date();
+  const startTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  const today = now.toISOString().split('T')[0];
+
+  const updateData: Record<string, any> = {
+    status: 'ACTIVE',
+    startTime,
+    bookingDate: today
+  };
+
+  // Recalculate endTime from the moment of approval for fixed-duration sessions
+  if (record.duration && record.duration !== 'Open Time') {
+    const hours = parseDurationHours(record.duration);
+    if (hours > 0) {
+      const endDate = new Date(now.getTime() + hours * 60 * 60 * 1000);
+      updateData.endTime = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
   }
+
+  await db.ref('sessions/' + refNum).update(updateData);
 }
 
 export async function markAwaitingAsPaid(refNum: string): Promise<void> {

@@ -70,6 +70,10 @@ function init(): void {
     if (localStorage.getItem("adminAuthenticated") === "true") {
       adminState.isAuthenticated = true;
       unlockAdminMode();
+    } else {
+      // Restore last active tab (URL params handled below may override)
+      const savedTab = localStorage.getItem('activeTab') as 'avail' | 'check' | null;
+      if (savedTab === 'check') switchTab('check');
     }
 
     // Handle post-payment redirect: ?tab=check&ref=REFNUM

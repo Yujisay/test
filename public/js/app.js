@@ -120,6 +120,7 @@
   }
   function switchTab(tabId) {
     state.currentTab = tabId;
+    localStorage.setItem("activeTab", tabId);
     const btnAvail = document.getElementById("tabAvail");
     const btnCheck = document.getElementById("tabCheck");
     const secAvail = document.getElementById("sectionAvail");
@@ -1131,11 +1132,37 @@ Please proceed to the cashier desk to complete your payment.`);
     adminState.currentPage = 1;
     renderCurrentPage();
   }
+  function parseDurationHours(duration) {
+    if (!duration || duration === "Open Time") return 0;
+    const hourMatch = duration.match(/(\d+(?:\.\d+)?)\s*h/i);
+    const minMatch = duration.match(/(\d+(?:\.\d+)?)\s*m/i);
+    if (hourMatch) return parseFloat(hourMatch[1]);
+    if (minMatch) return parseFloat(minMatch[1]) / 60;
+    return 1;
+  }
   async function approveTransaction(refNum) {
     const db2 = getDb();
-    if (confirm("Approve session " + refNum + "?") && db2) {
-      await db2.ref("sessions/" + refNum).update({ status: "ACTIVE" });
+    if (!db2) return;
+    const snapshot = await db2.ref("sessions/" + refNum).once("value");
+    const record = snapshot.val();
+    if (!record) return;
+    if (!confirm(`Approve session ${refNum} for ${record.fullName}?`)) return;
+    const now = /* @__PURE__ */ new Date();
+    const startTime = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+    const today = now.toISOString().split("T")[0];
+    const updateData = {
+      status: "ACTIVE",
+      startTime,
+      bookingDate: today
+    };
+    if (record.duration && record.duration !== "Open Time") {
+      const hours = parseDurationHours(record.duration);
+      if (hours > 0) {
+        const endDate = new Date(now.getTime() + hours * 60 * 60 * 1e3);
+        updateData.endTime = endDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+      }
     }
+    await db2.ref("sessions/" + refNum).update(updateData);
   }
   async function markAwaitingAsPaid(refNum) {
     const db2 = getDb();
@@ -1571,6 +1598,9 @@ This permanently removes them from the database.`)) return;
       if (localStorage.getItem("adminAuthenticated") === "true") {
         adminState.isAuthenticated = true;
         unlockAdminMode();
+      } else {
+        const savedTab = localStorage.getItem("activeTab");
+        if (savedTab === "check") switchTab("check");
       }
       handleUrlParams();
       console.log("Study Hub Portal Ready.");
