@@ -25,20 +25,27 @@ function clearCountdown(): void {
   if (elapsedInterval !== null) { clearInterval(elapsedInterval); elapsedInterval = null; }
 }
 
-function parseSessionTime(timeStr: string): Date {
-  const now = new Date();
+function parseSessionTime(timeStr: string, bookingDate?: string): Date {
+  let base: Date;
+  if (bookingDate) {
+    // bookingDate is "YYYY-MM-DD" — force midnight local time
+    base = new Date(bookingDate + 'T00:00:00');
+    if (isNaN(base.getTime())) base = new Date();
+  } else {
+    base = new Date();
+  }
   const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-  if (!match) return now;
+  if (!match) return base;
   let h = parseInt(match[1]);
   const m = parseInt(match[2]);
   const period = match[3].toUpperCase();
   if (period === 'PM' && h !== 12) h += 12;
   if (period === 'AM' && h === 12) h = 0;
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
 }
 
-function addHoursToTimeString(timeStr: string, hours: number): string {
-  const date = parseSessionTime(timeStr);
+function addHoursToTimeString(timeStr: string, hours: number, bookingDate?: string): string {
+  const date = parseSessionTime(timeStr, bookingDate);
   const newDate = new Date(date.getTime() + hours * 60 * 60 * 1000);
   return newDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
@@ -52,12 +59,12 @@ async function autoExpireAndOfferExtend(record: SessionRecord): Promise<void> {
   openExtendModal(record.referenceNumber, record, true);
 }
 
-function startCountdown(endTime: string): void {
+function startCountdown(endTime: string, bookingDate?: string): void {
   clearCountdown();
   autoExpireHandled = false;
 
   function tick() {
-    const end = parseSessionTime(endTime);
+    const end = parseSessionTime(endTime, bookingDate);
     const remaining = end.getTime() - Date.now();
     const countdownEl = document.getElementById('sessionCountdown');
     const warningEl = document.getElementById('sessionWarningBanner');
@@ -246,7 +253,7 @@ export function renderSessionCard(record: SessionRecord): void {
   if (window.lucide) lucide.createIcons();
 
   if (isActive && !isOpenTime && record.endTime) {
-    setTimeout(() => startCountdown(record.endTime), 50);
+    setTimeout(() => startCountdown(record.endTime, record.bookingDate), 50);
   } else if (isActive && isOpenTime && record.timestamp) {
     setTimeout(() => startElapsedTimer(record.timestamp), 50);
   }

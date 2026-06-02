@@ -40,8 +40,14 @@ function getBaseUrl(req: Request): string {
   return `${proto}://${host}`;
 }
 
-function addHoursToTimeString(timeStr: string, hours: number): string {
-  const now = new Date();
+function addHoursToTimeString(timeStr: string, hours: number, bookingDate?: string): string {
+  let base: Date;
+  if (bookingDate) {
+    base = new Date(bookingDate + 'T00:00:00');
+    if (isNaN(base.getTime())) base = new Date();
+  } else {
+    base = new Date();
+  }
   const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
   if (!match) return timeStr;
   let h = parseInt(match[1]);
@@ -49,8 +55,10 @@ function addHoursToTimeString(timeStr: string, hours: number): string {
   const period = match[3].toUpperCase();
   if (period === 'PM' && h !== 12) h += 12;
   if (period === 'AM' && h === 12) h = 0;
-  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
-  const newDate = new Date(date.getTime() + hours * 60 * 60 * 1000);
+  const date = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
+  // If that date is already in the past, extend from now instead
+  const extendFrom = date.getTime() < Date.now() ? new Date() : date;
+  const newDate = new Date(extendFrom.getTime() + hours * 60 * 60 * 1000);
   return newDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
@@ -230,7 +238,7 @@ app.post('/api/xendit-webhook', async (req: Request, res: Response) => {
         const baseEndTime = ext?.currentEndTime || currentSession?.endTime || '';
         const extHours = ext?.hours || 1;
         const extAmount = ext?.amount || 0;
-        const newEndTime = baseEndTime ? addHoursToTimeString(baseEndTime, extHours) : '';
+        const newEndTime = baseEndTime ? addHoursToTimeString(baseEndTime, extHours, currentSession?.bookingDate) : '';
         const newAmount = Math.round(((Number(currentSession?.amount) || 0) + extAmount) * 100) / 100;
         const hoursLabel = extHours === 0.5 ? '30 min' : `${extHours}hr`;
 

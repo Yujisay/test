@@ -532,16 +532,22 @@
       elapsedInterval = null;
     }
   }
-  function parseSessionTime(timeStr) {
-    const now = /* @__PURE__ */ new Date();
+  function parseSessionTime(timeStr, bookingDate) {
+    let base;
+    if (bookingDate) {
+      base = /* @__PURE__ */ new Date(bookingDate + "T00:00:00");
+      if (isNaN(base.getTime())) base = /* @__PURE__ */ new Date();
+    } else {
+      base = /* @__PURE__ */ new Date();
+    }
     const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-    if (!match) return now;
+    if (!match) return base;
     let h = parseInt(match[1]);
     const m = parseInt(match[2]);
     const period = match[3].toUpperCase();
     if (period === "PM" && h !== 12) h += 12;
     if (period === "AM" && h === 12) h = 0;
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+    return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
   }
   async function autoExpireAndOfferExtend(record) {
     const db2 = getDb();
@@ -552,11 +558,11 @@
     }
     openExtendModal(record.referenceNumber, record, true);
   }
-  function startCountdown(endTime) {
+  function startCountdown(endTime, bookingDate) {
     clearCountdown();
     autoExpireHandled = false;
     function tick() {
-      const end = parseSessionTime(endTime);
+      const end = parseSessionTime(endTime, bookingDate);
       const remaining = end.getTime() - Date.now();
       const countdownEl = document.getElementById("sessionCountdown");
       const warningEl = document.getElementById("sessionWarningBanner");
@@ -725,7 +731,7 @@
   `;
     if (window.lucide) lucide.createIcons();
     if (isActive && !isOpenTime && record.endTime) {
-      setTimeout(() => startCountdown(record.endTime), 50);
+      setTimeout(() => startCountdown(record.endTime, record.bookingDate), 50);
     } else if (isActive && isOpenTime && record.timestamp) {
       setTimeout(() => startElapsedTimer(record.timestamp), 50);
     }
@@ -1214,9 +1220,16 @@ Enter hours to add:
         const period = match[3].toUpperCase();
         if (period === "PM" && h !== 12) h += 12;
         if (period === "AM" && h === 12) h = 0;
-        const now = /* @__PURE__ */ new Date();
-        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
-        const newDate = new Date(date.getTime() + hours * 60 * 60 * 1e3);
+        let base;
+        if (record.bookingDate) {
+          base = /* @__PURE__ */ new Date(record.bookingDate + "T00:00:00");
+          if (isNaN(base.getTime())) base = /* @__PURE__ */ new Date();
+        } else {
+          base = /* @__PURE__ */ new Date();
+        }
+        const storedEnd = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
+        const extendFrom = storedEnd.getTime() < Date.now() ? /* @__PURE__ */ new Date() : storedEnd;
+        const newDate = new Date(extendFrom.getTime() + hours * 60 * 60 * 1e3);
         newEndTime = newDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
       }
     }

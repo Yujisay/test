@@ -307,7 +307,8 @@ export async function extendSessionAdmin(refNum: string): Promise<void> {
   const hours = parseFloat(choice);
   if (isNaN(hours) || hours <= 0) { alert('Invalid hours entered.'); return; }
 
-  // Calculate new end time
+  // Calculate new end time — use bookingDate to get the correct calendar date,
+  // but if that end time has already passed, extend from right now instead.
   const currentEndTime = record.endTime || '';
   let newEndTime = currentEndTime;
   if (currentEndTime) {
@@ -318,9 +319,20 @@ export async function extendSessionAdmin(refNum: string): Promise<void> {
       const period = match[3].toUpperCase();
       if (period === 'PM' && h !== 12) h += 12;
       if (period === 'AM' && h === 12) h = 0;
-      const now = new Date();
-      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
-      const newDate = new Date(date.getTime() + hours * 60 * 60 * 1000);
+
+      // Use bookingDate as the base date, fall back to today
+      let base: Date;
+      if (record.bookingDate) {
+        base = new Date(record.bookingDate + 'T00:00:00');
+        if (isNaN(base.getTime())) base = new Date();
+      } else {
+        base = new Date();
+      }
+      const storedEnd = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
+
+      // If the stored end time is in the past, extend from now
+      const extendFrom = storedEnd.getTime() < Date.now() ? new Date() : storedEnd;
+      const newDate = new Date(extendFrom.getTime() + hours * 60 * 60 * 1000);
       newEndTime = newDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
     }
   }
