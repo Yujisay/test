@@ -2,7 +2,7 @@ import { PRICING, HOURLY_RATE, CLOSING_TIME } from './config';
 import { state } from './state';
 import { SessionTimes, SessionRecord } from './types';
 import { showLoader, hideLoader, showFormError, showTicketModal } from './ui';
-import { getDb } from './firebase';
+import { getDb, sessionKey } from './firebase';
 
 export function computeSessionTimes(hours: number, duration: string): SessionTimes {
   const now = new Date();
@@ -191,7 +191,7 @@ async function initiateCashCheckout(sessionData: SessionRecord): Promise<void> {
     const payMethod = state.paymentMethod === 'online' ? 'ONLINE' : 'CASH';
     const data: SessionRecord = { ...sessionData, status: 'PENDING SESSION', paymentMethod: payMethod };
     if (db) {
-      await db.ref('sessions/' + data.referenceNumber).set(data);
+      await db.ref('sessions/' + sessionKey(data)).set(data);
       hideLoader();
       showTicketModal(data);
     }
@@ -203,20 +203,25 @@ async function initiateCashCheckout(sessionData: SessionRecord): Promise<void> {
 }
 
 async function initiateOnlinePayment(sessionData: SessionRecord): Promise<void> {
+  const db = getDb();
   try {
     showLoader("Redirecting...", "Creating your secure payment link...");
+    const pendingSession: SessionRecord = { ...sessionData, status: 'AWAITING PAYMENT', paymentMethod: 'ONLINE' };
+    if (db) {
+      await db.ref('sessions/' + sessionKey(pendingSession)).set(pendingSession);
+    }
     const res = await fetch('/api/create-payment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sessionData)
     });
-    const data = await res.json();
-    if (!res.ok || !data.invoiceUrl) {
+    const result = await res.json();
+    if (!res.ok || !result.invoiceUrl) {
       hideLoader();
-      alert(data.error || "Failed to create payment link. Please try again.");
+      alert(result.error || "Failed to create payment link. Please try again.");
       return;
     }
-    window.location.href = data.invoiceUrl;
+    window.location.href = result.invoiceUrl;
   } catch (error) {
     console.error("Online payment error:", error);
     hideLoader();

@@ -88,11 +88,6 @@
           </p>
         </div>
       </div>
-      <button id="btnBackToUser"
-        class="hidden px-3 h-9 text-xs font-semibold rounded-lg bg-white/10 border border-white/20 hover:bg-white/20 text-white transition-colors flex items-center gap-1.5">
-        <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
-        Exit Admin
-      </button>
     </div>
   </header>
 
@@ -137,41 +132,63 @@
 
         <!-- Seat Type -->
         <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block" for="seatTypeSelect">Seat Type</label>
-          <div class="relative rounded-xl shadow-sm">
-            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-brand-neutral">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block" for="seatTypeDropdownToggle">Seat Type</label>
+          <div class="relative rounded-xl shadow-sm form-dropdown">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-brand-neutral z-10">
               <i data-lucide="armchair" class="w-4 h-4"></i>
             </div>
-            <select id="seatTypeSelect"
-              class="block w-full pl-10 pr-10 py-3 bg-brand-surface border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark appearance-none cursor-pointer transition-all">
-              <option value="">Select a seat type...</option>
-              <option value="Table">&#x1FA91; Table &mdash; Perfect for solo study</option>
-              <option value="Cubicle">&#x1F9D1;&#x200D;&#x1F4BB; Cubicle &mdash; Premium focused space</option>
-            </select>
-            <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-brand-neutral">
-              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            <button type="button" id="seatTypeDropdownToggle"
+              class="form-dropdown-toggle w-full flex items-center pl-10 pr-10 py-3 text-sm font-semibold rounded-xl bg-brand-surface hover:bg-brand-light border border-brand-border transition-all text-brand-dark text-left">
+              <span id="seatTypeDropdownLabel" class="flex-1 truncate">Select a seat type...</span>
+              <i data-lucide="chevron-down" class="w-4 h-4 text-brand-neutral absolute right-3.5"></i>
+            </button>
+            <div id="seatTypeDropdownMenu"
+              class="form-dropdown-menu hidden absolute left-0 right-0 top-full mt-1.5 bg-brand-surface border border-brand-border rounded-xl shadow-soft z-50 overflow-hidden">
+              <button type="button" class="form-dropdown-option w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-neutral" data-select="seatTypeSelect" data-value="" data-label="Select a seat type...">Select a seat type...</button>
+              <div class="border-t border-brand-border"></div>
+              <button type="button" class="form-dropdown-option w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-dark" data-select="seatTypeSelect" data-value="Table" data-label="🪑 Table — Perfect for solo study">🪑 Table — Perfect for solo study</button>
+              <div class="border-t border-brand-border"></div>
+              <button type="button" class="form-dropdown-option w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-dark" data-select="seatTypeSelect" data-value="Cubicle" data-label="🧑‍💻 Cubicle — Premium focused space">🧑‍💻 Cubicle — Premium focused space</button>
             </div>
+            <select id="seatTypeSelect" class="sr-only" tabindex="-1" aria-hidden="true">
+              <option value="">Select a seat type...</option>
+              <option value="Table">Table</option>
+              <option value="Cubicle">Cubicle</option>
+            </select>
           </div>
         </div>
 
         <!-- Duration -->
         <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block" for="durationSelect">Duration</label>
-          <div class="relative rounded-xl shadow-sm">
-            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-brand-neutral">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block" for="durationDropdownToggle">Duration</label>
+          <div class="relative rounded-xl shadow-sm form-dropdown">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-brand-neutral z-10">
               <i data-lucide="clock" class="w-4 h-4"></i>
             </div>
-            <select id="durationSelect"
-              class="block w-full pl-10 pr-10 py-3 bg-brand-surface border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark appearance-none cursor-pointer transition-all">
+            <button type="button" id="durationDropdownToggle"
+              class="form-dropdown-toggle w-full flex items-center pl-10 pr-10 py-3 text-sm font-semibold rounded-xl bg-brand-surface hover:bg-brand-light border border-brand-border transition-all text-brand-dark text-left">
+              <span id="durationDropdownLabel" class="flex-1 truncate">Select duration...</span>
+              <i data-lucide="chevron-down" class="w-4 h-4 text-brand-neutral absolute right-3.5"></i>
+            </button>
+            <div id="durationDropdownMenu"
+              class="form-dropdown-menu hidden absolute left-0 right-0 top-full mt-1.5 bg-brand-surface border border-brand-border rounded-xl shadow-soft z-50 overflow-hidden">
+              <button type="button" class="form-dropdown-option w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-neutral" data-select="durationSelect" data-value="" data-label="Select duration...">Select duration...</button>
+              <div class="border-t border-brand-border"></div>
+              <button type="button" class="form-dropdown-option w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-dark" data-select="durationSelect" data-value="1 Hour" data-label="1 Hour">1 Hour</button>
+              <div class="border-t border-brand-border"></div>
+              <button type="button" class="form-dropdown-option w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-dark" data-select="durationSelect" data-value="3+1 Hours" data-label="3+1 Hours (4 hrs total)">3+1 Hours (4 hrs total)</button>
+              <div class="border-t border-brand-border"></div>
+              <button type="button" class="form-dropdown-option w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-dark" data-select="durationSelect" data-value="Open Time" data-label="Open Time — Pay by usage">Open Time — Pay by usage</button>
+              <div class="border-t border-brand-border"></div>
+              <button type="button" class="form-dropdown-option w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-dark" data-select="durationSelect" data-value="Custom" data-label="Custom Duration">Custom Duration</button>
+            </div>
+            <select id="durationSelect" class="sr-only" tabindex="-1" aria-hidden="true">
               <option value="">Select duration...</option>
               <option value="1 Hour">1 Hour</option>
               <option value="3+1 Hours">3+1 Hours (4 hrs total)</option>
-              <option value="Open Time">Open Time &mdash; Pay by usage</option>
+              <option value="Open Time">Open Time</option>
               <option value="Custom">Custom Duration</option>
             </select>
-            <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-brand-neutral">
-              <i data-lucide="chevron-down" class="w-4 h-4"></i>
-            </div>
           </div>
         </div>
 
@@ -272,178 +289,12 @@
     </div>
   </main>
 
-  <!-- Admin Dashboard -->
-  <main id="privateAdminView" class="hidden flex-1 w-full max-w-4xl mx-auto px-4 py-6 z-20 flex flex-col justify-start animate-fade-in">
-
-    <div class="flex items-center justify-between border-b border-brand-border pb-5 mb-6">
-
-      <!-- Left: logo + name -->
-      <div class="flex items-center gap-3">
-        <div class="w-11 h-11 brand-logo-container shrink-0">
-          <img src="/img/logo.jpg" alt="Han12 Logo" class="brand-logo-image">
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-lg font-extrabold font-['Outfit'] tracking-tight text-brand-primary">Han12</h1>
-            <span class="text-[9px] font-bold uppercase tracking-widest text-white bg-brand-primary px-1.5 py-0.5 rounded flex items-center gap-1">
-              <i data-lucide="lock" class="w-2.5 h-2.5"></i>
-              Admin
-            </span>
-          </div>
-          <p class="text-[11px] text-brand-neutral mt-0.5">Operations Terminal</p>
-        </div>
-      </div>
-
-      <!-- Right: actions dropdown -->
-      <div class="relative" id="adminActionsMenu">
-        <button id="btnAdminActions"
-          class="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-xl bg-brand-surface hover:bg-brand-secondary/20 border border-brand-border transition-all text-brand-dark">
-          <i data-lucide="settings-2" class="w-3.5 h-3.5"></i>
-          Actions
-          <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform duration-200" id="adminActionsChevron"></i>
-        </button>
-        <div id="adminActionsDropdown"
-          class="hidden absolute right-0 top-full mt-1.5 w-52 bg-brand-surface border border-brand-border rounded-xl shadow-soft z-50 overflow-hidden animate-fade-in">
-          <button id="btnRefreshAdmin"
-            class="w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-dark">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-brand-neutral"></i>
-            Refresh Logs
-          </button>
-          <div class="border-t border-brand-border"></div>
-          <button id="btnSalesReport"
-            class="w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light transition-colors text-brand-primary">
-            <i data-lucide="file-bar-chart" class="w-3.5 h-3.5"></i>
-            Sales Report
-          </button>
-          <div class="border-t border-brand-border"></div>
-          <button id="btnArchiveLogs"
-            class="w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-rose-50 transition-colors text-rose-600">
-            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-            Archive Old Sessions
-          </button>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- KPI Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div class="p-5 bg-brand-surface border border-brand-border rounded-2xl flex items-center justify-between shadow-soft">
-        <div class="space-y-1">
-          <span class="text-xs font-semibold text-brand-neutral uppercase tracking-wider block">Active Sessions</span>
-          <span id="adminActiveSessions" class="text-3xl font-extrabold font-['Outfit'] block text-emerald-600">0</span>
-        </div>
-        <div class="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-          <i data-lucide="activity" class="w-6 h-6"></i>
-        </div>
-      </div>
-      <div class="p-5 bg-brand-surface border border-brand-border rounded-2xl flex items-center justify-between shadow-soft">
-        <div class="space-y-1">
-          <span class="text-xs font-semibold text-brand-neutral uppercase tracking-wider block">Daily Earnings</span>
-          <span id="adminDailyEarnings" class="text-3xl font-extrabold font-['Outfit'] block text-brand-primary">₱0.00</span>
-        </div>
-        <div class="w-12 h-12 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary">
-          <i data-lucide="banknote" class="w-6 h-6"></i>
-        </div>
-      </div>
-      <div class="p-5 bg-brand-surface border border-brand-border rounded-2xl flex items-center justify-between shadow-soft">
-        <div class="space-y-1">
-          <span class="text-xs font-semibold text-brand-neutral uppercase tracking-wider block">Pending Approvals</span>
-          <span id="adminPendingPayments" class="text-3xl font-extrabold font-['Outfit'] block text-amber-600 animate-pulse">0</span>
-        </div>
-        <div class="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-          <i data-lucide="clock" class="w-6 h-6"></i>
-        </div>
-      </div>
-    </div>
-
-    <!-- Data Table -->
-    <div class="bg-brand-surface border border-brand-border rounded-2xl flex flex-col flex-1 overflow-hidden min-h-[400px] shadow-soft">
-      <div class="p-4 border-b border-brand-border flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div class="relative rounded-xl max-w-sm flex-1">
-          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-brand-neutral">
-            <i data-lucide="filter" class="w-3.5 h-3.5"></i>
-          </div>
-          <input type="text" id="adminTableFilter"
-            class="block w-full pl-9 pr-4 py-2 bg-brand-light border border-brand-border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-primary placeholder-brand-neutral/40 transition-all text-brand-dark"
-            placeholder="Filter by Ref Number, Name, Status...">
-        </div>
-        <select id="adminStatusSelector" class="bg-brand-light border border-brand-border rounded-lg text-xs px-3 py-2 text-brand-dark focus:outline-none">
-          <option value="ALL">All Statuses</option>
-          <option value="ACTIVE">Active Sessions</option>
-          <option value="PENDING">Pending Approval</option>
-          <option value="AWAITING">Awaiting Payment</option>
-          <option value="EXPIRED">Expired / Completed</option>
-        </select>
-      </div>
-
-      <!-- Desktop Table (md+) -->
-      <div class="hidden md:block flex-1 overflow-x-auto relative">
-        <table class="w-full text-left text-xs border-collapse">
-          <thead class="sticky top-0 bg-brand-light text-brand-neutral uppercase tracking-wider font-semibold border-b border-brand-border select-none">
-            <tr>
-              <th class="py-3 px-4">Ref Number</th>
-              <th class="py-3 px-4">Customer Name</th>
-              <th class="py-3 px-4">Seat Type</th>
-              <th class="py-3 px-4">Duration</th>
-              <th class="py-3 px-4">Amount</th>
-              <th class="py-3 px-4">WiFi Status</th>
-              <th class="py-3 px-4">Start / End</th>
-              <th class="py-3 px-4 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="adminTableBody" class="divide-y divide-brand-border">
-            <tr>
-              <td colspan="8" class="text-center py-12 text-brand-neutral">
-                <div class="flex flex-col items-center justify-center space-y-2">
-                  <i data-lucide="loader-2" class="w-5 h-5 animate-spin text-brand-primary"></i>
-                  <span>Connecting to database server...</span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Mobile Cards (< md) -->
-      <div id="adminCardBody" class="md:hidden flex-1 overflow-y-auto divide-y divide-brand-border">
-        <div class="flex flex-col items-center justify-center space-y-2 py-12 text-brand-neutral text-xs">
-          <i data-lucide="loader-2" class="w-5 h-5 animate-spin text-brand-primary"></i>
-          <span>Connecting to database server...</span>
-        </div>
-      </div>
-
-      <!-- Pagination Footer -->
-      <div class="p-3 border-t border-brand-border bg-brand-light flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px]">
-        <div class="flex items-center gap-3">
-          <span id="adminTableCount" class="text-brand-neutral">Showing 0 rows</span>
-          <span id="adminTablePageInfo" class="text-brand-neutral hidden">— Page <span id="adminCurrentPage">1</span> of <span id="adminTotalPages">1</span></span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button id="btnPagePrev" class="px-3 py-1.5 rounded-lg border border-brand-border bg-brand-surface text-brand-dark font-semibold hover:bg-brand-secondary/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1" disabled>
-            <i data-lucide="chevron-left" class="w-3 h-3"></i> Prev
-          </button>
-          <button id="btnPageNext" class="px-3 py-1.5 rounded-lg border border-brand-border bg-brand-surface text-brand-dark font-semibold hover:bg-brand-secondary/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1" disabled>
-            Next <i data-lucide="chevron-right" class="w-3 h-3"></i>
-          </button>
-          <div class="flex items-center space-x-1.5 font-semibold text-brand-dark ml-2">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span>Firebase Connected</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </main>
-
   <!-- Footer -->
   <footer class="w-full border-t border-brand-border py-4 bg-brand-surface/40 backdrop-blur-sm select-none z-40 relative">
-    <div class="max-w-md mx-auto px-4 flex justify-between items-center">
+    <div class="max-w-md mx-auto px-4 flex justify-center items-center">
       <div class="text-[10px] text-brand-neutral font-medium">
         <span>© 2026 Han12</span>
       </div>
-      <button id="adminTriggerIcon" class="p-2 text-brand-neutral/60 hover:text-brand-primary transition-all duration-300 rounded-lg cursor-pointer focus:outline-none">
-        <i data-lucide="lock" class="w-3.5 h-3.5"></i>
-      </button>
     </div>
   </footer>
 
@@ -456,32 +307,6 @@
     <div class="text-center space-y-1">
       <h3 id="loadingTitle" class="text-sm font-bold tracking-wide text-brand-dark font-['Outfit']">Processing Request</h3>
       <p id="loadingMsg" class="text-xs text-brand-neutral max-w-[240px] mx-auto leading-relaxed">Talking to database systems, please wait...</p>
-    </div>
-  </div>
-
-  <!-- Admin Auth Modal -->
-  <div id="adminAuthModal" class="fixed inset-0 bg-brand-dark/20 backdrop-blur-md z-40 flex items-center justify-center hidden animate-fade-in">
-    <div class="bg-brand-surface border border-brand-border p-6 rounded-2xl shadow-soft w-[320px] space-y-4">
-      <div class="flex items-center space-x-3 text-brand-primary border-b border-brand-border pb-3">
-        <div class="w-9 h-9 rounded-lg bg-brand-primary/10 flex items-center justify-center text-brand-primary">
-          <i data-lucide="shield-check" class="w-5 h-5"></i>
-        </div>
-        <div>
-          <h3 class="font-bold text-sm text-brand-dark font-['Outfit']">Security Authentication</h3>
-          <span class="text-[10px] text-brand-neutral uppercase tracking-wider font-semibold">Access restricted</span>
-        </div>
-      </div>
-      <div class="space-y-2">
-        <label class="text-[10px] font-semibold text-brand-neutral uppercase tracking-wider block" for="adminPassword">Master Password</label>
-        <input type="password" id="adminPassword"
-          class="block w-full px-3 py-2.5 bg-brand-light border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-center tracking-widest text-brand-dark"
-          placeholder="••••••••">
-        <p id="adminAuthError" class="text-[10px] text-rose-600 hidden font-medium">Incorrect master credentials. Access Denied.</p>
-      </div>
-      <div class="grid grid-cols-2 gap-2 pt-2">
-        <button id="btnCancelAdminAuth" class="py-2.5 px-3 rounded-lg text-xs font-semibold border border-brand-border text-brand-neutral hover:text-brand-dark hover:bg-brand-light transition-colors">Cancel</button>
-        <button id="btnSubmitAdminAuth" class="py-2.5 px-3 rounded-lg text-xs font-semibold bg-brand-primary hover:bg-brand-primary/90 text-white transition-colors shadow-sm">Authenticate</button>
-      </div>
     </div>
   </div>
 
@@ -616,45 +441,6 @@
             Pay at Cashier
           </button>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Sales Report Modal -->
-  <div id="salesReportModal" class="fixed inset-0 bg-brand-dark/20 backdrop-blur-md z-40 flex items-center justify-center hidden animate-fade-in">
-    <div class="bg-brand-surface border border-brand-border rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl mx-4">
-      <div class="bg-brand-primary p-5 text-white relative">
-        <div class="absolute top-4 right-4">
-          <button id="btnCloseSalesReport" class="w-7 h-7 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
-            <i data-lucide="x" class="w-4 h-4 text-white"></i>
-          </button>
-        </div>
-        <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-3">
-          <i data-lucide="file-bar-chart" class="w-6 h-6"></i>
-        </div>
-        <h3 class="text-base font-extrabold font-['Outfit'] text-center">Sales Report</h3>
-        <p class="text-xs text-brand-secondary text-center mt-0.5">Select a date range to generate a PDF report.</p>
-      </div>
-      <div class="p-6 space-y-5">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block">Start Date</label>
-          <input type="date" id="reportStartDate"
-            class="block w-full px-4 py-3 bg-brand-light border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark transition-all">
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral block">End Date</label>
-          <input type="date" id="reportEndDate"
-            class="block w-full px-4 py-3 bg-brand-light border border-brand-border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark transition-all">
-        </div>
-        <div class="p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-2 text-xs text-amber-700">
-          <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
-          <span>A print dialog will open. Choose "Save as PDF" to download the report.</span>
-        </div>
-        <button id="btnDownloadSalesReport"
-          class="w-full py-3.5 px-4 rounded-2xl font-bold font-['Outfit'] text-sm bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
-          <i data-lucide="download" class="w-4 h-4"></i>
-          Generate &amp; Download PDF
-        </button>
       </div>
     </div>
   </div>

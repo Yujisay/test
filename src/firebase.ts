@@ -20,3 +20,7 @@ export function initFirebase(): any {
 export function getDb(): any {
   return db;
 }
+
+export function sessionKey(record: { fullName: string; referenceNumber: string }): string {
+  return record.fullName + '_' + record.referenceNumber;
+}

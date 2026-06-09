@@ -105,3 +105,49 @@ table th { font-family: 'Outfit', sans-serif; }
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* User form custom dropdowns */
+.form-dropdown-menu {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Admin dark mode — light text throughout */
+.dark body {
+  color: #e8e2d4;
+}
+
+.dark #adminDashboard,
+.dark #adminLoginScreen {
+  color: #e8e2d4;
+}
+
+.dark #adminDashboard .text-brand-dark,
+.dark #adminDashboard td,
+.dark #adminDashboard .admin-table-row,
+.dark #adminDashboard .admin-card-item {
+  color: #e8e2d4;
+}
+
+.dark #adminDashboard .text-brand-neutral,
+.dark #adminDashboard th {
+  color: #a0a88e;
+}
+
+.dark #adminDashboard tr:hover,
+.dark #adminDashboard .admin-table-row:hover {
+  background-color: #252b1a;
+}
+
+.dark #adminDashboard .bg-brand-light {
+  background-color: #252b1a;
+}
+
+.dark #adminDashboard .admin-card-tile {
+  background-color: #252b1a;
+  border-color: #3a4229;
+}
+
+.dark #adminDashboard option {
+  background-color: #1a1f13;
+  color: #e8e2d4;
+}

@@ -1,5 +1,5 @@
 import { HOURLY_RATE } from './config';
-import { getDb } from './firebase';
+import { getDb, sessionKey } from './firebase';
 import { SessionRecord } from './types';
 import { showLoader, hideLoader } from './ui';
 
@@ -54,9 +54,9 @@ async function autoExpireAndOfferExtend(record: SessionRecord): Promise<void> {
   const db = getDb();
   if (!db) return;
   try {
-    await db.ref('sessions/' + record.referenceNumber).update({ status: 'EXPIRED' });
+    await db.ref('sessions/' + sessionKey(record)).update({ status: 'EXPIRED' });
   } catch (e) { /* ignore if already expired */ }
-  openExtendModal(record.referenceNumber, record, true);
+  openExtendModal(sessionKey(record), record, true);
 }
 
 function startCountdown(endTime: string, bookingDate?: string): void {
@@ -188,7 +188,7 @@ export function renderSessionCard(record: SessionRecord): void {
         <span class="text-[10px] text-emerald-700 uppercase font-bold block mb-1">Time Remaining</span>
         <span id="sessionCountdown" class="text-3xl font-extrabold font-['Outfit'] text-emerald-700 block digital-clock">--:--</span>
       </div>
-      <button data-ref="${record.referenceNumber}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/30 text-brand-primary flex items-center justify-center gap-2 transition-all">
+      <button data-ref="${sessionKey(record)}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/30 text-brand-primary flex items-center justify-center gap-2 transition-all">
         <i data-lucide="clock-arrow-up" class="w-4 h-4"></i>
         Extend Session
       </button>`;
@@ -199,7 +199,7 @@ export function renderSessionCard(record: SessionRecord): void {
         <span id="sessionElapsed" class="text-2xl font-extrabold font-['Outfit'] text-amber-700 block digital-clock">0m 00s</span>
         <span class="text-[10px] text-amber-600 mt-1 block">Billing at ₱${rate}/hr — 15-min increments</span>
       </div>
-      <button data-ref="${record.referenceNumber}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
+      <button data-ref="${sessionKey(record)}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
         <i data-lucide="timer-off" class="w-4 h-4"></i>
         Stop My Session
       </button>`;
@@ -209,7 +209,7 @@ export function renderSessionCard(record: SessionRecord): void {
         <span class="text-[10px] text-rose-600 uppercase font-bold block mb-1">Session Ended</span>
         <span class="text-sm font-semibold text-rose-700">Your time is up.</span>
       </div>
-      <button data-ref="${record.referenceNumber}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
+      <button data-ref="${sessionKey(record)}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
         <i data-lucide="clock-arrow-up" class="w-4 h-4"></i>
         Extend &amp; Continue
       </button>`;
@@ -337,7 +337,7 @@ export async function confirmExtendCash(): Promise<void> {
   const hoursLabel = hours === 0.5 ? '30 min' : `${hours}hr`;
 
   closeExtendModal();
-  alert(`Extension Request — Ref#: ${refNum}\n\nDuration: +${hoursLabel}\nAmount due: ₱${cost.toFixed(2)}\n\nPlease proceed to the cashier desk and show this reference number. The cashier will extend your session once payment is received.`);
+  alert(`Extension Request — Ref#: ${record.referenceNumber}\n\nDuration: +${hoursLabel}\nAmount due: ₱${cost.toFixed(2)}\n\nPlease proceed to the cashier desk and show this reference number. The cashier will extend your session once payment is received.`);
 }
 
 export async function confirmExtendOnline(): Promise<void> {
@@ -355,7 +355,7 @@ export async function confirmExtendOnline(): Promise<void> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        referenceNumber: refNum,
+        referenceNumber: record.referenceNumber,
         fullName: record.fullName,
         seatType: record.seatType,
         extensionHours: hours,
@@ -369,7 +369,7 @@ export async function confirmExtendOnline(): Promise<void> {
       closeExtendModal();
       window.location.href = data.invoiceUrl;
     } else {
-      alert(`Could not create payment link. Please pay at the cashier desk.\n\nRef#: ${refNum}\nExtension: +${hoursLabel}\nAmount: ₱${cost.toFixed(2)}`);
+      alert(`Could not create payment link. Please pay at the cashier desk.\n\nRef#: ${record.referenceNumber}\nExtension: +${hoursLabel}\nAmount: ₱${cost.toFixed(2)}`);
     }
   } catch (err) {
     hideLoader();
@@ -429,7 +429,7 @@ export async function confirmStopCash(): Promise<void> {
     hideLoader();
     (document.getElementById('stopSessionModal') as HTMLElement).classList.add('hidden');
     stopSessionData = null;
-    alert(`Session stopped.\n\nRef#: ${refNum}\nTime Used: ${timeLabel}\nAmount Due: ₱${finalAmount.toFixed(2)}\n\nPlease proceed to the cashier desk to complete your payment.`);
+    alert(`Session stopped.\n\nRef#: ${stopSessionData.record.referenceNumber}\nTime Used: ${timeLabel}\nAmount Due: ₱${finalAmount.toFixed(2)}\n\nPlease proceed to the cashier desk to complete your payment.`);
     clearSearchLookup();
   } catch (err) {
     hideLoader();
@@ -459,7 +459,7 @@ export async function confirmStopOnline(): Promise<void> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        referenceNumber: refNum,
+        referenceNumber: record.referenceNumber,
         fullName: record.fullName,
         seatType: record.seatType,
         duration: `Open Time (${timeLabel})`,
@@ -474,7 +474,7 @@ export async function confirmStopOnline(): Promise<void> {
       stopSessionData = null;
       window.location.href = data.invoiceUrl;
     } else {
-      alert('Could not create payment link. Please pay at the cashier desk instead.\n\nRef#: ' + refNum + '\nAmount: ₱' + finalAmount.toFixed(2));
+      alert('Could not create payment link. Please pay at the cashier desk instead.\n\nRef#: ' + record.referenceNumber + '\nAmount: ₱' + finalAmount.toFixed(2));
     }
   } catch (err) {
     hideLoader();

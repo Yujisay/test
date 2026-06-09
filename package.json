@@ -1,25 +1,28 @@
 {
-  "name": "studyhub-wifi-portal",
+  "name": "hans12",
   "version": "1.0.0",
-  "description": "Study Hub WiFi Captive Portal with Xendit payment integration",
+  "description": "WiFi Captive Portal with QR code and cash payment",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser",
+    "build": "esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser && esbuild src/admin-page.ts --bundle --outfile=public/js/admin.js --platform=browser",
     "start": "npm run build && ts-node server.ts",
-    "dev": "concurrently \"esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser --watch\" \"nodemon --exec ts-node server.ts --watch server.ts\""
+    "dev:server": "nodemon --exec ts-node server.ts --watch server.ts",
+    "dev:client": "esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser --watch",
+    "dev:admin": "esbuild src/admin-page.ts --bundle --outfile=public/js/admin.js --platform=browser --watch",
+    "dev": "cmd /c \"dev.bat\""
   },
   "dependencies": {
-    "axios": "^1.16.1",
+    "axios": "^1.7.9",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
+    "dotenv": "^16.4.5",
     "express": "^5.2.1"
   },
   "devDependencies": {
-    "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.3",
     "@types/node": "^22.15.29",
     "concurrently": "^9.1.2",
     "esbuild": "^0.25.12",
     "nodemon": "^3.1.10",
+    "npm-run-all": "^4.1.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   }

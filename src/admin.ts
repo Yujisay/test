@@ -1,48 +1,125 @@
-import { ADMIN_PASSCODE, HOURLY_RATE, getPageSize } from './config';
-import { adminState, state } from './state';
+import { HOURLY_RATE, getPageSize } from './config';
+import { adminState } from './state';
 import { SessionRecord } from './types';
-import { showLoader, hideLoader, closeAdminAuth } from './ui';
-import { getDb } from './firebase';
+import { showLoader, hideLoader } from './ui';
+import { getDb, sessionKey } from './firebase';
 
-export function handleAdminTrigger(): void {
-  adminState.clickCount++;
-  if (adminState.clickTimer) clearTimeout(adminState.clickTimer);
-  adminState.clickTimer = setTimeout(() => { adminState.clickCount = 0; }, 2000);
+let adminTimerInterval: ReturnType<typeof setInterval> | null = null;
 
-  if (adminState.clickCount >= 3) {
-    adminState.clickCount = 0;
-    (document.getElementById("adminAuthModal") as HTMLElement).classList.remove("hidden");
-    (document.getElementById("adminPassword") as HTMLInputElement).focus();
-  }
-}
-
-export function submitAdminAuth(): void {
-  const pass = (document.getElementById("adminPassword") as HTMLInputElement).value;
-  if (pass === ADMIN_PASSCODE) {
-    adminState.isAuthenticated = true;
-    localStorage.setItem("adminAuthenticated", "true");
-    closeAdminAuth();
-    unlockAdminMode();
+function parseSessionTime(timeStr: string, bookingDate?: string): Date {
+  let base: Date;
+  if (bookingDate) {
+    base = new Date(bookingDate + 'T00:00:00');
+    if (isNaN(base.getTime())) base = new Date();
   } else {
-    (document.getElementById("adminAuthError") as HTMLElement).classList.remove("hidden");
+    base = new Date();
+  }
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return base;
+  let h = parseInt(match[1]);
+  const m = parseInt(match[2]);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && h !== 12) h += 12;
+  if (period === 'AM' && h === 12) h = 0;
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
+}
+
+function isOpenTimeSession(row: SessionRecord): boolean {
+  return row.duration === 'Open Time' || row.duration.startsWith('Open Time');
+}
+
+function formatCountdown(remainingMs: number): string {
+  if (remainingMs <= 0) return '00:00';
+  const totalSecs = Math.floor(remainingMs / 1000);
+  const hrs = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function formatElapsed(elapsedMs: number): string {
+  const totalSecs = Math.floor(elapsedMs / 1000);
+  const hrs = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  if (hrs > 0) return `${hrs}h ${mins.toString().padStart(2, '0')}m`;
+  return `${mins}m ${secs.toString().padStart(2, '0')}s`;
+}
+
+function getActiveTimerHtml(row: SessionRecord): string {
+  if (row.status !== 'ACTIVE') return '<span class="text-brand-neutral dark:text-[#a0a88e]">—</span>';
+
+  if (isOpenTimeSession(row)) {
+    return `<span class="admin-session-timer font-mono font-bold text-amber-600 dark:text-amber-400"
+      data-mode="elapsed" data-timestamp="${row.timestamp}">${formatElapsed(Date.now() - new Date(row.timestamp).getTime())}</span>
+      <span class="block text-[9px] text-brand-neutral dark:text-[#a0a88e] mt-0.5">elapsed</span>`;
+  }
+
+  if (!row.endTime) {
+    return '<span class="text-brand-neutral dark:text-[#a0a88e]">—</span>';
+  }
+
+  const remaining = parseSessionTime(row.endTime, row.bookingDate).getTime() - Date.now();
+  const urgent = remaining > 0 && remaining <= 5 * 60 * 1000;
+  const ended = remaining <= 0;
+  const colorClass = ended
+    ? 'text-rose-600 dark:text-rose-400'
+    : urgent
+      ? 'text-rose-600 dark:text-rose-400 animate-pulse'
+      : 'text-emerald-600 dark:text-emerald-400';
+
+  return `<span class="admin-session-timer font-mono font-bold ${colorClass}"
+    data-mode="countdown" data-end-time="${row.endTime}" data-booking-date="${row.bookingDate || ''}">${formatCountdown(remaining)}</span>
+    <span class="block text-[9px] text-brand-neutral dark:text-[#a0a88e] mt-0.5">${ended ? 'ended' : 'remaining'}</span>`;
+}
+
+function tickAdminTimers(): void {
+  document.querySelectorAll('.admin-session-timer').forEach(el => {
+    const mode = el.getAttribute('data-mode');
+    if (mode === 'countdown') {
+      const endTime = el.getAttribute('data-end-time') || '';
+      const bookingDate = el.getAttribute('data-booking-date') || undefined;
+      const remaining = parseSessionTime(endTime, bookingDate).getTime() - Date.now();
+      el.textContent = formatCountdown(remaining);
+      el.classList.remove('text-emerald-600', 'dark:text-emerald-400', 'text-rose-600', 'dark:text-rose-400', 'animate-pulse');
+      if (remaining <= 0) {
+        el.classList.add('text-rose-600', 'dark:text-rose-400');
+      } else if (remaining <= 5 * 60 * 1000) {
+        el.classList.add('text-rose-600', 'dark:text-rose-400', 'animate-pulse');
+      } else {
+        el.classList.add('text-emerald-600', 'dark:text-emerald-400');
+      }
+    } else if (mode === 'elapsed') {
+      const ts = el.getAttribute('data-timestamp') || '';
+      el.textContent = formatElapsed(Date.now() - new Date(ts).getTime());
+    }
+  });
+}
+
+function stopAdminTimers(): void {
+  if (adminTimerInterval !== null) {
+    clearInterval(adminTimerInterval);
+    adminTimerInterval = null;
   }
 }
 
-export function unlockAdminMode(): void {
-  (document.getElementById("publicClientView") as HTMLElement).classList.add("hidden");
-  (document.getElementById("privateAdminView") as HTMLElement).classList.remove("hidden");
-  (document.getElementById("btnBackToUser") as HTMLElement).classList.remove("hidden");
-  startRealtimeDashboard();
+function startAdminTimers(): void {
+  stopAdminTimers();
+  if (!document.querySelector('.admin-session-timer')) return;
+  tickAdminTimers();
+  adminTimerInterval = setInterval(tickAdminTimers, 1000);
 }
 
-export function exitAdminMode(): void {
+export function stopRealtimeDashboard(): void {
+  stopAdminTimers();
   const db = getDb();
-  localStorage.removeItem("adminAuthenticated");
   if (db && adminState.unsubscribe) {
     db.ref('sessions').off("value", adminState.unsubscribe);
     adminState.unsubscribe = null;
   }
-  location.reload();
 }
 
 export function startRealtimeDashboard(): void {
@@ -72,6 +149,7 @@ export function renderAdminTable(records: SessionRecord[]): void {
 }
 
 export function renderCurrentPage(): void {
+  stopAdminTimers();
   const records = adminState.filteredCache;
   const tbody = document.getElementById("adminTableBody") as HTMLElement;
   const cardBody = document.getElementById("adminCardBody") as HTMLElement;
@@ -79,8 +157,8 @@ export function renderCurrentPage(): void {
   cardBody.innerHTML = "";
 
   if (records.length === 0) {
-    const emptyMsg = `<div class="flex flex-col items-center justify-center space-y-2 py-12 text-brand-neutral text-xs"><i data-lucide="inbox" class="w-5 h-5"></i><span>No records found.</span></div>`;
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-brand-neutral">No records found.</td></tr>`;
+    const emptyMsg = `<div class="flex flex-col items-center justify-center space-y-2 py-12 text-brand-neutral dark:text-[#a0a88e] text-xs"><i data-lucide="inbox" class="w-5 h-5"></i><span>No records found.</span></div>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-12 text-brand-neutral">No records found.</td></tr>`;
     cardBody.innerHTML = emptyMsg;
     (document.getElementById("adminTableCount") as HTMLElement).textContent = "Showing 0 rows";
     (document.getElementById("adminTablePageInfo") as HTMLElement).classList.add("hidden");
@@ -98,78 +176,85 @@ export function renderCurrentPage(): void {
   const end = Math.min(start + pageSize, records.length);
 
   records.slice(start, end).forEach(row => {
+    const key = sessionKey(row);
     const rate = row.hourlyRate || HOURLY_RATE[row.seatType] || 25;
     const amountDisplay = row.duration === 'Open Time' && row.status === 'ACTIVE'
       ? `₱${rate}/hr` : `₱${Number(row.amount).toFixed(2)}`;
 
-    const isOpenTime = row.duration === 'Open Time';
+    const isOpenTime = isOpenTimeSession(row);
+    const timerHtml = getActiveTimerHtml(row);
     let actionHtml = '';
     if (row.status === 'PENDING SESSION') {
-      actionHtml = `<button data-ref="${row.referenceNumber}" class="btn-approve-session px-3 py-1 bg-brand-primary text-white rounded text-[10px] font-semibold">Approve</button>`;
+      actionHtml = `<button data-ref="${key}" class="btn-approve-session px-3 py-1 bg-brand-primary text-white rounded text-[10px] font-semibold">Approve</button>`;
     } else if (row.status === 'ACTIVE') {
       actionHtml = `
         <div class="flex flex-col gap-1">
-          <button data-ref="${row.referenceNumber}" class="btn-end-session px-3 py-1 bg-rose-500 text-white rounded text-[10px] font-semibold">${isOpenTime ? 'End & Bill' : 'End'}</button>
-          ${!isOpenTime ? `<button data-ref="${row.referenceNumber}" class="btn-admin-extend px-3 py-1 bg-brand-primary/10 border border-brand-primary/30 text-brand-primary rounded text-[10px] font-semibold whitespace-nowrap">Extend</button>` : ''}
+          <button data-ref="${key}" class="btn-end-session px-3 py-1 bg-rose-500 text-white rounded text-[10px] font-semibold">${isOpenTime ? 'End & Bill' : 'End'}</button>
+          ${!isOpenTime ? `<button data-ref="${key}" class="btn-admin-extend px-3 py-1 bg-brand-primary/10 border border-brand-primary/30 text-brand-primary rounded text-[10px] font-semibold whitespace-nowrap">Extend</button>` : ''}
         </div>`;
     } else if (row.status === 'AWAITING PAYMENT') {
       actionHtml = `
         <div class="flex flex-col gap-1">
-          <button data-ref="${row.referenceNumber}" class="btn-mark-paid px-3 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold whitespace-nowrap">Mark Paid</button>
-          <button data-ref="${row.referenceNumber}" class="btn-cancel-awaiting px-3 py-1 bg-rose-100 text-rose-600 border border-rose-200 rounded text-[10px] font-semibold whitespace-nowrap">Cancel</button>
+          <button data-ref="${key}" class="btn-mark-paid px-3 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold whitespace-nowrap">Mark Paid</button>
+          <button data-ref="${key}" class="btn-cancel-awaiting px-3 py-1 bg-rose-100 text-rose-600 border border-rose-200 rounded text-[10px] font-semibold whitespace-nowrap">Cancel</button>
         </div>`;
     }
 
     const statusColor = row.status === 'ACTIVE'
-      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+      ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
       : row.status === 'PENDING SESSION'
-        ? 'text-amber-700 bg-amber-50 border-amber-200'
+        ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800'
         : row.status === 'AWAITING PAYMENT'
-          ? 'text-blue-700 bg-blue-50 border-blue-200'
-          : 'text-brand-neutral bg-brand-light border-brand-border';
+          ? 'text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800'
+          : 'text-brand-neutral dark:text-[#a0a88e] bg-brand-light dark:bg-[#252b1a] border-brand-border dark:border-[#3a4229]';
 
     // --- Desktop table row ---
     const tr = document.createElement("tr");
-    tr.className = "hover:bg-brand-light";
+    tr.className = "admin-table-row hover:bg-brand-light dark:hover:bg-[#252b1a] text-brand-dark dark:text-[#e8e2d4]";
     tr.innerHTML = `
-      <td class="py-3 px-4 font-mono font-bold">${row.referenceNumber}</td>
+      <td class="py-3 px-4 font-mono font-bold text-brand-primary">${row.referenceNumber}</td>
       <td class="py-3 px-4 font-semibold">${row.fullName}</td>
       <td class="py-3 px-4">${row.seatType}</td>
       <td class="py-3 px-4">${row.duration}</td>
       <td class="py-3 px-4 font-bold">${amountDisplay}</td>
       <td class="py-3 px-4"><span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${statusColor}">${row.status}</span></td>
-      <td class="py-3 px-4 text-[10px]">${row.startTime} – ${row.endTime}</td>
+      <td class="py-3 px-4">${timerHtml}</td>
+      <td class="py-3 px-4 text-[10px] text-brand-neutral dark:text-[#a0a88e]">${row.startTime} – ${row.endTime}</td>
       <td class="py-3 px-4 text-center">${actionHtml || '–'}</td>
     `;
     tbody.appendChild(tr);
 
     // --- Mobile card ---
     const card = document.createElement("div");
-    card.className = "p-4 space-y-3";
+    card.className = "admin-card-item p-4 space-y-3 text-brand-dark dark:text-[#e8e2d4]";
     card.innerHTML = `
       <div class="flex items-start justify-between gap-2">
         <div>
           <span class="font-mono font-extrabold text-brand-primary text-sm">${row.referenceNumber}</span>
-          <p class="font-semibold text-brand-dark text-sm mt-0.5">${row.fullName}</p>
+          <p class="font-semibold text-sm mt-0.5">${row.fullName}</p>
         </div>
         <span class="text-[10px] font-bold uppercase px-2 py-1 rounded-lg border whitespace-nowrap ${statusColor}">${row.status}</span>
       </div>
+      ${row.status === 'ACTIVE' ? `<div class="admin-card-tile bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-3 border border-emerald-200 dark:border-emerald-800 text-center">
+          <span class="text-brand-neutral dark:text-[#a0a88e] block text-[9px] uppercase font-semibold mb-1">Live Timer</span>
+          ${timerHtml}
+        </div>` : ''}
       <div class="grid grid-cols-2 gap-2 text-xs">
-        <div class="bg-brand-light rounded-lg p-2">
-          <span class="text-brand-neutral block text-[9px] uppercase font-semibold mb-0.5">Seat</span>
-          <span class="font-semibold text-brand-dark">${row.seatType}</span>
+        <div class="admin-card-tile bg-brand-light dark:bg-[#252b1a] rounded-lg p-2 border border-transparent dark:border-[#3a4229]">
+          <span class="text-brand-neutral dark:text-[#a0a88e] block text-[9px] uppercase font-semibold mb-0.5">Seat</span>
+          <span class="font-semibold">${row.seatType}</span>
         </div>
-        <div class="bg-brand-light rounded-lg p-2">
-          <span class="text-brand-neutral block text-[9px] uppercase font-semibold mb-0.5">Duration</span>
-          <span class="font-semibold text-brand-dark">${row.duration}</span>
+        <div class="admin-card-tile bg-brand-light dark:bg-[#252b1a] rounded-lg p-2 border border-transparent dark:border-[#3a4229]">
+          <span class="text-brand-neutral dark:text-[#a0a88e] block text-[9px] uppercase font-semibold mb-0.5">Duration</span>
+          <span class="font-semibold">${row.duration}</span>
         </div>
-        <div class="bg-brand-light rounded-lg p-2">
-          <span class="text-brand-neutral block text-[9px] uppercase font-semibold mb-0.5">Amount</span>
+        <div class="admin-card-tile bg-brand-light dark:bg-[#252b1a] rounded-lg p-2 border border-transparent dark:border-[#3a4229]">
+          <span class="text-brand-neutral dark:text-[#a0a88e] block text-[9px] uppercase font-semibold mb-0.5">Amount</span>
           <span class="font-bold text-brand-primary">${amountDisplay}</span>
         </div>
-        <div class="bg-brand-light rounded-lg p-2">
-          <span class="text-brand-neutral block text-[9px] uppercase font-semibold mb-0.5">Time</span>
-          <span class="font-semibold text-brand-dark text-[10px]">${row.startTime} – ${row.endTime}</span>
+        <div class="admin-card-tile bg-brand-light dark:bg-[#252b1a] rounded-lg p-2 border border-transparent dark:border-[#3a4229]">
+          <span class="text-brand-neutral dark:text-[#a0a88e] block text-[9px] uppercase font-semibold mb-0.5">Time</span>
+          <span class="font-semibold text-[10px]">${row.startTime} – ${row.endTime}</span>
         </div>
       </div>
       ${actionHtml ? `<div class="pt-1 flex flex-col gap-2">${actionHtml}</div>` : ''}
@@ -191,6 +276,7 @@ export function renderCurrentPage(): void {
 
   updatePaginationControls(totalPages);
   if (window.lucide) lucide.createIcons();
+  startAdminTimers();
 }
 
 function updatePaginationControls(totalPages: number): void {
@@ -389,25 +475,31 @@ export async function extendSessionAdmin(refNum: string): Promise<void> {
   });
 }
 
+function getPHTime(): Date {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+}
+
 export async function archiveOldSessions(): Promise<void> {
   const db = getDb();
-  const DAYS = 30;
-  const cutoff = Date.now() - DAYS * 24 * 60 * 60 * 1000;
+  const DAYS = 7;
+  const phNow = getPHTime();
+  const cutoff = new Date(phNow.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   const expired = adminState.recordsCache.filter(r =>
-    r.status === 'EXPIRED' && new Date(r.timestamp).getTime() < cutoff
+    r.status === 'EXPIRED' && new Date(r.timestamp) < cutoff
   );
 
   if (expired.length === 0) {
-    alert(`No expired sessions older than ${DAYS} days found.`); return;
+    alert('No expired sessions older than 7 days found.');
+    return;
   }
 
-  if (!confirm(`Archive ${expired.length} expired session${expired.length !== 1 ? 's' : ''} older than ${DAYS} days?\n\nThis permanently removes them from the database.`)) return;
+  if (!confirm('Are you sure you want to delete expired sessions older than 7 days? This cannot be undone.')) return;
 
   try {
     showLoader("Archiving...", `Removing ${expired.length} old records...`);
     const updates: Record<string, null> = {};
-    expired.forEach(r => { updates[`sessions/${r.referenceNumber}`] = null; });
+    expired.forEach(r => { updates[`sessions/${sessionKey(r)}`] = null; });
     await db.ref().update(updates);
     alert(`Done! ${expired.length} old record${expired.length !== 1 ? 's' : ''} removed.`);
   } catch (err) {

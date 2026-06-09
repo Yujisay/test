@@ -1,0 +1,12 @@
+{
+  "rules": {
+    "sessions": {
+      ".read": true,
+      ".write": true
+    },
+    "adminConfig": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}

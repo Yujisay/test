@@ -1,0 +1,145 @@
+ ====================================================
+  HANS12 - NODE/NPM TROUBLESHOOTING NOTES
+====================================================
+
+QUICK START (after first-time setup)
+--------------------------------------
+  cd C:\Projects\han12
+  .\dev.bat            <- development with auto-reload (opens 2 windows)
+
+  Server runs on: http://localhost:5000
+
+  NOTE: npm run dev does NOT work on Windows due to quote escaping issues.
+  Always use .\dev.bat instead.
+
+
+====================================================
+COMMANDS REFERENCE
+====================================================
+
+  ACTIVE CODING (auto-reload):
+    .\dev.bat
+
+  FINAL TESTING (build then run):
+    npx esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser
+    npx ts-node server.ts
+
+  QUICK SERVER CHECK:
+    npx ts-node server.ts
+
+
+====================================================
+PROBLEM 1: TypeScript can't find modules
+====================================================
+ERROR:
+  TSError: Unable to compile TypeScript
+  - Cannot find module 'express'
+  - Cannot find name 'path'
+  - Cannot find name '__dirname'
+
+FIX:
+  npm install express
+  npm install --save-dev @types/express @types/node
+
+Make sure tsconfig.json contains:
+  {
+    "compilerOptions": {
+      "target": "ES2020",
+      "module": "commonjs",
+      "esModuleInterop": true,
+      "types": ["node"],
+      "outDir": "./dist",
+      "rootDir": "./"
+    }
+  }
+
+
+====================================================
+PROBLEM 2: npm install fails with EPERM errors
+====================================================
+ERROR:
+  EPERM: operation not permitted, rmdir node_modules\rxjs\...
+
+CAUSE:
+  Windows Defender scanning the Downloads folder aggressively.
+
+FIX - Move project out of Downloads:
+  mkdir C:\projects\han12
+  Copy-Item C:\Users\Home\Downloads\han12zip\* C:\projects\han12\ -Exclude node_modules -Recurse
+  cd C:\projects\han12
+  npm install --ignore-scripts
+
+  !! ALWAYS work from C:\projects\han12, NEVER from Downloads !!
+
+If node_modules won't delete, use robocopy trick:
+  mkdir C:\empty_temp
+  robocopy C:\empty_temp C:\projects\han12\node_modules /MIR
+  Remove-Item -Recurse -Force C:\projects\han12\node_modules
+  Remove-Item -Recurse -Force C:\empty_temp
+
+
+====================================================
+PROBLEM 3: npm install fails with ERR_INVALID_ARG_TYPE
+====================================================
+ERROR:
+  The "file" argument must be of type string. Received undefined
+
+CAUSE:
+  esbuild's postinstall script fails on some Windows setups.
+
+FIX:
+  npm install --ignore-scripts
+  node node_modules/esbuild/install.js
+
+  If that still fails:
+  npm install --ignore-scripts
+  npm install @esbuild/win32-x64 --save-dev
+
+
+====================================================
+PROBLEM 4: Server not running / same errors in Cursor
+====================================================
+ERROR:
+  Same TypeScript errors even after fixing everything.
+
+CAUSE:
+  Terminal is pointed at the wrong folder (old Downloads path).
+
+FIX:
+  cd C:\Projects\han12
+  .\dev.bat
+
+
+====================================================
+PROBLEM 5: npm run dev exits immediately / does nothing
+====================================================
+CAUSE:
+  Windows blocks the "start" command when called through npm scripts
+  due to quote escaping issues with concurrently.
+
+FIX - Use dev.bat directly instead:
+  .\dev.bat
+
+  This opens two separate windows:
+  - Window 1: esbuild watching src/main.ts -> public/js/app.js
+  - Window 2: nodemon watching server.ts, restarts on changes
+
+dev.bat contents (located at C:\Projects\han12\dev.bat):
+  @echo off
+  start "esbuild" cmd /k "npx esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser --watch"
+  start "nodemon" cmd /k "npx nodemon --exec ts-node server.ts --watch server.ts"
+
+
+====================================================
+KEY RULES TO REMEMBER
+====================================================
+  [OK] Always work from C:\Projects\han12
+  [OK] Use "npm install --ignore-scripts" if esbuild causes errors
+  [OK] Remove @types/dotenv — dotenv ships its own types now
+  [OK] node_modules deletion on Windows: use robocopy trick first,
+       then Remove-Item
+  [OK] Use .\dev.bat to start development, NOT npm run dev
+  [NO] Never run from Downloads folder — Windows Defender blocks npm
+
+
+====================================================

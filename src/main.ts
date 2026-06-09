@@ -1,8 +1,8 @@
 console.log("Study Hub Portal loading...");
 
 import { initFirebase, getDb } from './firebase';
-import { state, adminState } from './state';
-import { switchTab, updateConnectionStatus, closeTicketModal, closeAdminAuth, downloadReceipt } from './ui';
+import { state } from './state';
+import { switchTab, updateConnectionStatus, closeTicketModal, downloadReceipt } from './ui';
 import {
   onDurationChange, updateFormPreview,
   selectPaymentMethod, initiateCheckout
@@ -11,17 +11,8 @@ import {
   checkSessionStatus, clearSearchLookup,
   stopOpenTimeSession, confirmStopCash, confirmStopOnline,
   openExtendModal, closeExtendModal, updateExtendCostPreview,
-  confirmExtendCash, confirmExtendOnline, extendData
+  confirmExtendCash, confirmExtendOnline
 } from './session';
-import {
-  handleAdminTrigger, submitAdminAuth, unlockAdminMode, exitAdminMode,
-  refreshAdminDashboard, archiveOldSessions, renderCurrentPage,
-  filterAdminLogs, approveTransaction, endSession,
-  markAwaitingAsPaid, cancelAwaitingPayment,
-  openSalesReportModal, closeSalesReportModal, downloadSalesReport,
-  extendSessionAdmin
-} from './admin';
-import { getPageSize } from './config';
 
 function init(): void {
   console.log("Study Hub Portal Initializing...");
@@ -47,10 +38,8 @@ function init(): void {
 
     window.addEventListener('click', handleGlobalClicks, { capture: true, passive: false });
 
-    // Expose extend preview updater for radio onchange callbacks
     (window as any).updateExtendPreview = () => {
       updateExtendCostPreview();
-      // Highlight selected card
       document.querySelectorAll('.extend-option').forEach(opt => {
         const radio = opt.querySelector('input[type="radio"]') as HTMLInputElement;
         const card = opt.querySelector('.extend-label') as HTMLElement;
@@ -67,16 +56,9 @@ function init(): void {
 
     setupListeners();
 
-    if (localStorage.getItem("adminAuthenticated") === "true") {
-      adminState.isAuthenticated = true;
-      unlockAdminMode();
-    } else {
-      // Restore last active tab (URL params handled below may override)
-      const savedTab = localStorage.getItem('activeTab') as 'avail' | 'check' | null;
-      if (savedTab === 'check') switchTab('check');
-    }
+    const savedTab = localStorage.getItem('activeTab') as 'avail' | 'check' | null;
+    if (savedTab === 'check') switchTab('check');
 
-    // Handle post-payment redirect: ?tab=check&ref=REFNUM
     handleUrlParams();
 
     console.log("Study Hub Portal Ready.");
@@ -96,13 +78,12 @@ function handleUrlParams(): void {
   const ref = params.get('ref');
 
   if (tab === 'check' && ref) {
-    // Look up the session by ref to get the name, then auto-search
     const db = getDb();
     if (db) {
       switchTab('check');
-      db.ref('sessions/' + ref).once('value').then((snap: any) => {
+      db.ref('sessions').orderByChild('referenceNumber').equalTo(ref).once('value').then((snap: any) => {
         if (snap.exists()) {
-          const record = snap.val();
+          const record = Object.values(snap.val())[0] as { fullName?: string };
           const searchInput = document.getElementById("searchName") as HTMLInputElement;
           if (searchInput && record.fullName) {
             searchInput.value = record.fullName;
@@ -114,9 +95,21 @@ function handleUrlParams(): void {
         }
       }).catch(() => { switchTab('check'); });
     }
-    // Clean URL without reload
     window.history.replaceState({}, document.title, '/');
   }
+}
+
+function closeFormDropdowns(): void {
+  document.querySelectorAll('.form-dropdown-menu').forEach(menu => {
+    menu.classList.add('hidden');
+  });
+}
+
+function setupFormDropdowns(): void {
+  document.addEventListener('click', () => closeFormDropdowns());
+
+  document.getElementById('seatTypeSelect')?.addEventListener('change', updateFormPreview);
+  document.getElementById('durationSelect')?.addEventListener('change', onDurationChange);
 }
 
 function setupListeners(): void {
@@ -124,24 +117,48 @@ function setupListeners(): void {
     if (e.key === 'Enter') { e.preventDefault(); checkSessionStatus(); }
   });
 
-  document.getElementById("adminPassword")?.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); submitAdminAuth(); }
-  });
-
-  document.getElementById("adminTableFilter")?.addEventListener("input", filterAdminLogs);
-  document.getElementById("adminStatusSelector")?.addEventListener("change", filterAdminLogs);
-  document.getElementById("seatTypeSelect")?.addEventListener("change", updateFormPreview);
-  document.getElementById("durationSelect")?.addEventListener("change", onDurationChange);
+  setupFormDropdowns();
   document.getElementById("customHours")?.addEventListener("input", updateFormPreview);
   document.getElementById("payMethodCash")?.addEventListener("click", () => selectPaymentMethod('cash'));
   document.getElementById("payMethodOnline")?.addEventListener("click", () => selectPaymentMethod('online'));
 }
 
 function handleGlobalClicks(e: MouseEvent): void {
-  const target = (e.target as HTMLElement).closest('button, #adminTriggerIcon') as HTMLElement;
+  const target = (e.target as HTMLElement).closest('button') as HTMLElement;
   if (!target) return;
 
   const id = target.id;
+
+  if (id === 'seatTypeDropdownToggle' || id === 'durationDropdownToggle') {
+    e.stopPropagation();
+    const menuId = id === 'seatTypeDropdownToggle' ? 'seatTypeDropdownMenu' : 'durationDropdownMenu';
+    const menu = document.getElementById(menuId);
+    const wasOpen = menu && !menu.classList.contains('hidden');
+    closeFormDropdowns();
+    if (menu && !wasOpen) menu.classList.remove('hidden');
+    return;
+  }
+
+  if (target.classList.contains('form-dropdown-option')) {
+    e.stopPropagation();
+    const selectId = target.getAttribute('data-select');
+    const value = target.getAttribute('data-value') ?? '';
+    const label = target.getAttribute('data-label') ?? '';
+    const select = document.getElementById(selectId!) as HTMLSelectElement;
+    if (select) {
+      select.value = value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    const labelId = selectId === 'seatTypeSelect' ? 'seatTypeDropdownLabel' : 'durationDropdownLabel';
+    const labelEl = document.getElementById(labelId);
+    if (labelEl) {
+      labelEl.textContent = label;
+      labelEl.classList.toggle('text-brand-neutral', !value);
+      labelEl.classList.toggle('text-brand-dark', !!value);
+    }
+    closeFormDropdowns();
+    return;
+  }
 
   if (id === 'tabAvail') switchTab('avail');
   if (id === 'tabCheck') switchTab('check');
@@ -157,9 +174,6 @@ function handleGlobalClicks(e: MouseEvent): void {
   }
   if (id === 'btnClearSearch' || id === 'btnRetrySearch') clearSearchLookup();
 
-  if (id === 'adminTriggerIcon') { e.stopPropagation(); handleAdminTrigger(); }
-  if (id === 'btnCancelAdminAuth') closeAdminAuth();
-  if (id === 'btnSubmitAdminAuth') submitAdminAuth();
   if (id === 'btnCloseTicket' || id === 'btnDoneTicket') closeTicketModal();
 
   if (id === 'btnDownloadReceipt') {
@@ -167,57 +181,6 @@ function handleGlobalClicks(e: MouseEvent): void {
     downloadReceipt();
   }
 
-  if (id === 'btnRefreshAdmin') {
-    if (state.dbConnected) refreshAdminDashboard();
-    else alert("Database disconnected.");
-  }
-  if (id === 'btnArchiveLogs') {
-    if (state.dbConnected) archiveOldSessions();
-    else alert("Database disconnected.");
-  }
-  if (id === 'btnPagePrev') {
-    if (adminState.currentPage > 1) { adminState.currentPage--; renderCurrentPage(); }
-  }
-  if (id === 'btnPageNext') {
-    const totalPages = Math.ceil(adminState.filteredCache.length / getPageSize());
-    if (adminState.currentPage < totalPages) { adminState.currentPage++; renderCurrentPage(); }
-  }
-  if (id === 'btnBackToUser') exitAdminMode();
-
-  if (target.classList.contains('btn-approve-session')) {
-    const refNum = target.getAttribute('data-ref');
-    if (refNum && state.dbConnected) approveTransaction(refNum);
-  }
-  if (target.classList.contains('btn-end-session')) {
-    const refNum = target.getAttribute('data-ref');
-    if (refNum && state.dbConnected) endSession(refNum);
-  }
-
-  // Awaiting payment actions
-  if (target.classList.contains('btn-mark-paid')) {
-    const refNum = target.getAttribute('data-ref');
-    if (refNum && state.dbConnected) markAwaitingAsPaid(refNum);
-    else if (!state.dbConnected) alert("Database disconnected.");
-  }
-  if (target.classList.contains('btn-cancel-awaiting')) {
-    const refNum = target.getAttribute('data-ref');
-    if (refNum && state.dbConnected) cancelAwaitingPayment(refNum);
-    else if (!state.dbConnected) alert("Database disconnected.");
-  }
-
-  // Sales report
-  if (id === 'btnSalesReport') openSalesReportModal();
-  if (id === 'btnCloseSalesReport') closeSalesReportModal();
-  if (id === 'btnDownloadSalesReport') downloadSalesReport();
-
-  // Admin extend session
-  if (target.classList.contains('btn-admin-extend')) {
-    const refNum = target.getAttribute('data-ref');
-    if (refNum && state.dbConnected) extendSessionAdmin(refNum);
-    else if (!state.dbConnected) alert("Database disconnected.");
-  }
-
-  // Customer extend session (from session card button)
   if (target.classList.contains('btn-extend-session')) {
     const refNum = target.getAttribute('data-ref');
     if (refNum && state.dbConnected) {
@@ -232,40 +195,21 @@ function handleGlobalClicks(e: MouseEvent): void {
     } else if (!state.dbConnected) alert("Database disconnected.");
   }
 
-  // Extend session modal buttons
   if (id === 'btnCloseExtend') closeExtendModal();
   if (id === 'btnExtendPayCash') confirmExtendCash();
   if (id === 'btnExtendPayOnline') confirmExtendOnline();
 
-  // Customer stop session
   if (target.classList.contains('btn-customer-stop-session')) {
     const refNum = target.getAttribute('data-ref');
     if (refNum && state.dbConnected) stopOpenTimeSession(refNum);
     else if (!state.dbConnected) alert("Cannot stop session while database is disconnected.");
   }
 
-  // Stop session modal buttons
   if (id === 'btnCancelStop') {
     (document.getElementById('stopSessionModal') as HTMLElement).classList.add('hidden');
   }
-  if (id === 'btnStopPayCash') {
-    confirmStopCash();
-  }
-  if (id === 'btnStopPayOnline') {
-    confirmStopOnline();
-  }
+  if (id === 'btnStopPayCash') confirmStopCash();
+  if (id === 'btnStopPayOnline') confirmStopOnline();
 }
 
 document.addEventListener("DOMContentLoaded", init);
-
-let lastBreakpoint = window.innerWidth < 768 ? 'mobile' : 'desktop';
-window.addEventListener('resize', () => {
-  const current = window.innerWidth < 768 ? 'mobile' : 'desktop';
-  if (current !== lastBreakpoint) {
-    lastBreakpoint = current;
-    if (adminState.isAuthenticated && adminState.filteredCache.length > 0) {
-      adminState.currentPage = 1;
-      renderCurrentPage();
-    }
-  }
-});

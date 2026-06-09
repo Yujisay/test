@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Hub Admin</title>
+  <script>
+    (function() {
+      if (sessionStorage.getItem('adminTheme') === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              primary: '#535C3B',
+              secondary: '#E5D3B3',
+              accent: '#C8A374',
+              neutral: '#707070',
+              dark: '#373737',
+              light: '#E8EDE0',
+              surface: '#F3F6EE',
+              border: '#D4DCCA',
+            }
+          },
+          boxShadow: {
+            'soft': '0 4px 20px rgba(0, 0, 0, 0.05)',
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="min-h-screen font-['Inter'] antialiased bg-brand-light dark:bg-[#252b1a] text-brand-dark dark:text-[#e8e2d4] transition-colors flex flex-col">
+
+  <!-- Brand Header -->
+  <header class="w-full border-b border-brand-primary/30 bg-brand-primary sticky top-0 z-40 transition-all duration-300 shrink-0">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-12 h-12 brand-logo-container">
+          <img src="/img/logo.jpg" alt="Study Hub Logo" class="brand-logo-image">
+        </div>
+        <div>
+          <h1 class="text-lg font-extrabold font-['Outfit'] tracking-tight text-white">Han12</h1>
+          <p class="text-[10px] text-brand-secondary/80 flex items-center">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+            STUDY HUB · VA LOUNGE · SNACKS
+          </p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Login Screen -->
+  <div id="adminLoginScreen" class="flex-1 flex items-center justify-center px-4 py-8">
+    <div class="w-full max-w-sm bg-brand-surface dark:bg-[#1a1f13] border border-brand-border dark:border-[#3a4229] rounded-2xl shadow-soft p-8 space-y-5">
+      <div class="text-center space-y-1">
+        <div class="w-14 h-14 rounded-2xl bg-brand-primary/10 flex items-center justify-center mx-auto mb-3">
+          <i data-lucide="shield-check" class="w-7 h-7 text-brand-primary"></i>
+        </div>
+        <h1 class="text-xl font-extrabold font-['Outfit'] text-brand-dark dark:text-[#e8e2d4]">Study Hub Admin</h1>
+        <p class="text-xs text-brand-neutral dark:text-[#a0a88e]">Enter password to continue</p>
+      </div>
+      <div class="space-y-3">
+        <input type="password" id="adminLoginPassword" placeholder="Password"
+          class="block w-full px-4 py-3 bg-brand-light dark:bg-[#252b1a] border border-brand-border dark:border-[#3a4229] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-center tracking-widest text-brand-dark dark:text-[#e8e2d4]">
+        <p id="adminLoginError" class="text-xs text-rose-600 text-center hidden font-medium"></p>
+        <p id="adminLockoutMsg" class="text-xs text-amber-600 text-center hidden font-medium"></p>
+        <button id="btnAdminLogin"
+          class="w-full py-3 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white font-bold font-['Outfit'] text-sm transition-all">
+          Log In
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Dashboard -->
+  <div id="adminDashboard" class="hidden flex-1 flex flex-col">
+
+    <!-- Admin toolbar -->
+    <div class="sticky top-16 z-30 bg-brand-surface dark:bg-[#1a1f13] border-b border-brand-border dark:border-[#3a4229] shadow-soft shrink-0">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div>
+          <span class="text-[9px] font-bold uppercase tracking-widest text-white bg-brand-primary px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+            <i data-lucide="lock" class="w-2.5 h-2.5"></i>
+            Admin
+          </span>
+          <p class="text-sm text-brand-neutral dark:text-[#a0a88e] mt-1.5">Operations Terminal</p>
+        </div>
+        <div class="relative">
+          <button id="adminDropdownToggle"
+            class="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl bg-brand-light dark:bg-[#252b1a] hover:bg-brand-secondary/20 border border-brand-border dark:border-[#3a4229] transition-all text-brand-dark dark:text-[#e8e2d4]">
+            <i data-lucide="menu" class="w-3.5 h-3.5"></i>
+            Menu
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </button>
+          <div id="adminDropdownMenu"
+            class="hidden absolute right-0 top-full mt-1.5 w-56 bg-brand-surface dark:bg-[#1a1f13] border border-brand-border dark:border-[#3a4229] rounded-xl shadow-soft z-50 overflow-hidden">
+            <button id="btnRefreshAdmin"
+              class="w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light dark:hover:bg-[#252b1a] transition-colors text-brand-dark dark:text-[#e8e2d4]">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-brand-neutral dark:text-[#a0a88e]"></i>
+              Refresh Logs
+            </button>
+            <button id="btnSalesReport"
+              class="w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light dark:hover:bg-[#252b1a] transition-colors text-brand-primary">
+              <i data-lucide="file-bar-chart" class="w-3.5 h-3.5"></i>
+              Sales Report
+            </button>
+            <button id="btnArchiveLogs"
+              class="w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors text-rose-600">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              Archive Old Sessions
+            </button>
+            <div class="border-t border-brand-border dark:border-[#3a4229]"></div>
+            <button id="btnThemeToggle"
+              class="w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light dark:hover:bg-[#252b1a] transition-colors text-brand-dark dark:text-[#e8e2d4]">
+              <i data-lucide="moon" class="w-3.5 h-3.5" id="themeToggleIcon"></i>
+              <span id="themeToggleLabel">Dark Mode</span>
+            </button>
+            <button id="btnOpenSettings"
+              class="w-full px-4 py-3 text-xs font-semibold text-left flex items-center gap-2.5 hover:bg-brand-light dark:hover:bg-[#252b1a] transition-colors text-brand-dark dark:text-[#e8e2d4]">
+              <i data-lucide="settings" class="w-3.5 h-3.5 text-brand-neutral dark:text-[#a0a88e]"></i>
+              Settings
+            </button>
+            <div class="border-t border-brand-border dark:border-[#3a4229]"></div>
+            <button id="btnLogout"
+              class="w-full px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-semibold flex items-center gap-2 transition-colors">
+              <i data-lucide="log-out" class="w-4 h-4"></i>
+              Exit / Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <main class="flex-1 w-full max-w-6xl mx-auto px-4 py-6 flex flex-col">
+
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="p-5 bg-brand-surface dark:bg-[#1a1f13] border border-brand-border dark:border-[#3a4229] rounded-2xl flex items-center justify-between shadow-soft">
+          <div class="space-y-1">
+            <span class="text-xs font-semibold text-brand-neutral dark:text-[#a0a88e] uppercase tracking-wider block">Active Sessions</span>
+            <span id="adminActiveSessions" class="text-3xl font-extrabold font-['Outfit'] block text-emerald-600">0</span>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center text-emerald-600">
+            <i data-lucide="activity" class="w-6 h-6"></i>
+          </div>
+        </div>
+        <div class="p-5 bg-brand-surface dark:bg-[#1a1f13] border border-brand-border dark:border-[#3a4229] rounded-2xl flex items-center justify-between shadow-soft">
+          <div class="space-y-1">
+            <span class="text-xs font-semibold text-brand-neutral dark:text-[#a0a88e] uppercase tracking-wider block">Daily Earnings</span>
+            <span id="adminDailyEarnings" class="text-3xl font-extrabold font-['Outfit'] block text-brand-primary">₱0.00</span>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+            <i data-lucide="banknote" class="w-6 h-6"></i>
+          </div>
+        </div>
+        <div class="p-5 bg-brand-surface dark:bg-[#1a1f13] border border-brand-border dark:border-[#3a4229] rounded-2xl flex items-center justify-between shadow-soft">
+          <div class="space-y-1">
+            <span class="text-xs font-semibold text-brand-neutral dark:text-[#a0a88e] uppercase tracking-wider block">Pending Approvals</span>
+            <span id="adminPendingPayments" class="text-3xl font-extrabold font-['Outfit'] block text-amber-600 animate-pulse">0</span>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center text-amber-600">
+            <i data-lucide="clock" class="w-6 h-6"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Table -->
+      <div class="bg-brand-surface dark:bg-[#1a1f13] border border-brand-border dark:border-[#3a4229] rounded-2xl flex flex-col flex-1 overflow-hidden min-h-[400px] shadow-soft">
+        <div class="p-4 border-b border-brand-border dark:border-[#3a4229] flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div class="relative rounded-xl max-w-sm flex-1">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-brand-neutral dark:text-[#a0a88e]">
+              <i data-lucide="filter" class="w-3.5 h-3.5"></i>
+            </div>
+            <input type="text" id="adminTableFilter"
+              class="block w-full pl-9 pr-4 py-2 bg-brand-light dark:bg-[#252b1a] border border-brand-border dark:border-[#3a4229] rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-primary placeholder-brand-neutral/40 transition-all text-brand-dark dark:text-[#e8e2d4]"
+              placeholder="Filter by Ref Number, Name, Status...">
+          </div>
+          <select id="adminStatusSelector"
+            class="bg-brand-light dark:bg-[#252b1a] border border-brand-border dark:border-[#3a4229] rounded-lg text-xs px-3 py-2 text-brand-dark dark:text-[#e8e2d4] focus:outline-none">
+            <option value="ALL">All Statuses</option>
+            <option value="ACTIVE">Active Sessions</option>
+            <option value="PENDING">Pending Approval</option>
+            <option value="AWAITING">Awaiting Payment</option>
+            <option value="EXPIRED">Expired / Completed</option>
+          </select>
+        </div>
+
+        <div class="hidden md:block flex-1 overflow-x-auto relative">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="sticky top-0 bg-brand-light dark:bg-[#252b1a] text-brand-neutral dark:text-[#a0a88e] uppercase tracking-wider font-semibold border-b border-brand-border dark:border-[#3a4229] select-none">
+              <tr>
+                <th class="py-3 px-4">Ref Number</th>
+                <th class="py-3 px-4">Customer Name</th>
+                <th class="py-3 px-4">Seat Type</th>
+                <th class="py-3 px-4">Duration</th>
+                <th class="py-3 px-4">Amount</th>
+                <th class="py-3 px-4">WiFi Status</th>
+                <th class="py-3 px-4">Live Timer</th>
+                <th class="py-3 px-4">Start / End</th>
+                <th class="py-3 px-4 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminTableBody" class="divide-y divide-brand-border dark:divide-[#3a4229]">
+              <tr>
+                <td colspan="9" class="text-center py-12 text-brand-neutral dark:text-[#a0a88e]">
+                  <div class="flex flex-col items-center justify-center space-y-2">
+                    <i data-lucide="loader-2" class="w-5 h-5 animate-spin text-brand-primary"></i>
+                    <span>Connecting to database server...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="adminCardBody" class="md:hidden flex-1 overflow-y-auto divide-y divide-brand-border dark:divide-[#3a4229]">
+          <div class="flex flex-col items-center justify-center space-y-2 py-12 text-brand-neutral dark:text-[#a0a88e] text-xs">
+            <i data-lucide="loader-2" class="w-5 h-5 animate-spin text-brand-primary"></i>
+            <span>Connecting to database server...</span>
+          </div>
+        </div>
+
+        <div class="p-3 border-t border-brand-border dark:border-[#3a4229] bg-brand-light dark:bg-[#252b1a] flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px]">
+          <div class="flex items-center gap-3">
+            <span id="adminTableCount" class="text-brand-neutral dark:text-[#a0a88e]">Showing 0 rows</span>
+            <span id="adminTablePageInfo" class="text-brand-neutral dark:text-[#a0a88e] hidden">— Page <span id="adminCurrentPage">1</span> of <span id="adminTotalPages">1</span></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btnPagePrev"
+              class="px-3 py-1.5 rounded-lg border border-brand-border dark:border-[#3a4229] bg-brand-surface dark:bg-[#1a1f13] text-brand-dark dark:text-[#e8e2d4] font-semibold hover:bg-brand-secondary/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1" disabled>
+              <i data-lucide="chevron-left" class="w-3 h-3"></i> Prev
+            </button>
+            <button id="btnPageNext"
+              class="px-3 py-1.5 rounded-lg border border-brand-border dark:border-[#3a4229] bg-brand-surface dark:bg-[#1a1f13] text-brand-dark dark:text-[#e8e2d4] font-semibold hover:bg-brand-secondary/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1" disabled>
+              Next <i data-lucide="chevron-right" class="w-3 h-3"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="fixed inset-0 bg-brand-light/80 dark:bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center flex-col space-y-4 hidden select-none">
+    <div class="relative w-16 h-16">
+      <div class="absolute inset-0 rounded-full border-4 border-brand-primary/10"></div>
+      <div class="absolute inset-0 rounded-full border-4 border-t-brand-primary border-r-brand-primary/60 border-l-brand-primary/10 animate-spin"></div>
+    </div>
+    <div class="text-center space-y-1">
+      <h3 id="loadingTitle" class="text-sm font-bold tracking-wide text-brand-dark dark:text-[#e8e2d4] font-['Outfit']">Processing Request</h3>
+      <p id="loadingMsg" class="text-xs text-brand-neutral dark:text-[#a0a88e] max-w-[240px] mx-auto leading-relaxed">Please wait...</p>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 bg-brand-dark/20 dark:bg-black/50 backdrop-blur-md z-40 flex items-center justify-center hidden">
+    <div class="bg-brand-surface dark:bg-[#1a1f13] border border-brand-border dark:border-[#3a4229] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl mx-4">
+      <div class="bg-brand-primary p-5 text-white relative">
+        <div class="absolute top-4 right-4">
+          <button id="btnCloseSettings" class="w-7 h-7 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
+            <i data-lucide="x" class="w-4 h-4 text-white"></i>
+          </button>
+        </div>
+        <h3 class="text-base font-extrabold font-['Outfit'] text-center">Settings</h3>
+      </div>
+      <div class="p-6 space-y-6">
+        <div class="space-y-4">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-brand-neutral dark:text-[#a0a88e]">Change Password</h4>
+          <div class="space-y-3">
+            <input type="password" id="settingsCurrentPassword" placeholder="Current password"
+              class="block w-full px-4 py-2.5 bg-brand-light dark:bg-[#252b1a] border border-brand-border dark:border-[#3a4229] rounded-xl text-sm text-brand-dark dark:text-[#e8e2d4] focus:outline-none focus:ring-2 focus:ring-brand-primary">
+            <input type="password" id="settingsNewPassword" placeholder="New password (min 6 characters)"
+              class="block w-full px-4 py-2.5 bg-brand-light dark:bg-[#252b1a] border border-brand-border dark:border-[#3a4229] rounded-xl text-sm text-brand-dark dark:text-[#e8e2d4] focus:outline-none focus:ring-2 focus:ring-brand-primary">
+            <input type="password" id="settingsConfirmPassword" placeholder="Confirm new password"
+              class="block w-full px-4 py-2.5 bg-brand-light dark:bg-[#252b1a] border border-brand-border dark:border-[#3a4229] rounded-xl text-sm text-brand-dark dark:text-[#e8e2d4] focus:outline-none focus:ring-2 focus:ring-brand-primary">
+            <p id="settingsPasswordError" class="text-xs text-rose-600 hidden"></p>
+            <p id="settingsPasswordSuccess" class="text-xs text-emerald-600 hidden"></p>
+            <button id="btnSavePassword"
+              class="w-full py-3 rounded-xl bg-brand-primary hover:bg-brand-primary/90 text-white font-bold text-sm transition-all">
+              Save Password
+            </button>
+          </div>
+        </div>
+        <div class="border-t border-brand-border dark:border-[#3a4229] pt-4 space-y-2">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-brand-neutral dark:text-[#a0a88e]">Archive Settings</h4>
+          <p class="text-xs text-brand-neutral dark:text-[#a0a88e] leading-relaxed">
+            Expired sessions older than 7 days are automatically deleted when Archive is triggered.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sales Report Modal -->
+  <div id="salesReportModal" class="fixed inset-0 bg-brand-dark/20 dark:bg-black/50 backdrop-blur-md z-40 flex items-center justify-center hidden">
+    <div class="bg-brand-surface dark:bg-[#1a1f13] border border-brand-border dark:border-[#3a4229] rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl mx-4">
+      <div class="bg-brand-primary p-5 text-white relative">
+        <div class="absolute top-4 right-4">
+          <button id="btnCloseSalesReport" class="w-7 h-7 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
+            <i data-lucide="x" class="w-4 h-4 text-white"></i>
+          </button>
+        </div>
+        <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-3">
+          <i data-lucide="file-bar-chart" class="w-6 h-6"></i>
+        </div>
+        <h3 class="text-base font-extrabold font-['Outfit'] text-center">Sales Report</h3>
+        <p class="text-xs text-brand-secondary text-center mt-0.5">Select a date range to generate a PDF report.</p>
+      </div>
+      <div class="p-6 space-y-5">
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral dark:text-[#a0a88e] block">Start Date</label>
+          <input type="date" id="reportStartDate"
+            class="block w-full px-4 py-3 bg-brand-light dark:bg-[#252b1a] border border-brand-border dark:border-[#3a4229] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark dark:text-[#e8e2d4] transition-all">
+        </div>
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-brand-neutral dark:text-[#a0a88e] block">End Date</label>
+          <input type="date" id="reportEndDate"
+            class="block w-full px-4 py-3 bg-brand-light dark:bg-[#252b1a] border border-brand-border dark:border-[#3a4229] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary text-sm text-brand-dark dark:text-[#e8e2d4] transition-all">
+        </div>
+        <div class="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 rounded-xl flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+          <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i>
+          <span>A print dialog will open. Choose "Save as PDF" to download the report.</span>
+        </div>
+        <button id="btnDownloadSalesReport"
+          class="w-full py-3.5 px-4 rounded-2xl font-bold font-['Outfit'] text-sm bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          Generate &amp; Download PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>

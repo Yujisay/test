@@ -1,0 +1,15 @@
+[1G[0K⠙[1G[0K
+> studyhub-wifi-portal@1.0.0 start
+> npm run build && ts-node server.ts
+
+[1G[0K⠙[1G[0K
+> studyhub-wifi-portal@1.0.0 build
+> esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser
+
+[1G[0Ksh: line 1: /home/runner/workspace/node_modules/.bin/esbuild: Permission denied
+[1G[0K⠙[1G[0K[1G[0K⠙[1G[0K[1mnpm[22m [96mnotice[39m
+[1mnpm[22m [96mnotice[39m New [31mmajor[39m version of npm available! [31m10.8.2[39m -> [34m11.16.0[39m
+[1mnpm[22m [96mnotice[39m Changelog: [34mhttps://github.com/npm/cli/releases/tag/v11.16.0[39m
+[1mnpm[22m [96mnotice[39m To update run: [4mnpm install -g npm@11.16.0[24m
+[1mnpm[22m [96mnotice[39m
+[1G[0K⠙[1G[0K
