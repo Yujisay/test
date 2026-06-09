@@ -1230,6 +1230,23 @@ This permanently removes them from the database.`)) return;
     document.getElementById("adminDailyEarnings").innerText = `\u20B1${earnings.toFixed(2)}`;
     document.getElementById("adminPendingPayments").innerText = String(pending);
   }
+  function toggleAdminActionsDropdown() {
+    const dropdown = document.getElementById("adminActionsDropdown");
+    const chevron = document.getElementById("adminActionsChevron");
+    const isHidden = dropdown.classList.contains("hidden");
+    if (isHidden) {
+      dropdown.classList.remove("hidden");
+      chevron?.classList.add("rotate-180");
+    } else {
+      closeAdminActionsDropdown();
+    }
+  }
+  function closeAdminActionsDropdown() {
+    const dropdown = document.getElementById("adminActionsDropdown");
+    const chevron = document.getElementById("adminActionsChevron");
+    dropdown?.classList.add("hidden");
+    chevron?.classList.remove("rotate-180");
+  }
   function openSalesReportModal() {
     const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const firstOfMonth = new Date((/* @__PURE__ */ new Date()).getFullYear(), (/* @__PURE__ */ new Date()).getMonth(), 1).toISOString().split("T")[0];
@@ -1570,6 +1587,9 @@ This permanently removes them from the database.`)) return;
     document.getElementById("customHours")?.addEventListener("input", updateFormPreview);
   }
   function handleGlobalClicks(e) {
+    if (!document.getElementById("adminActionsMenu")?.contains(e.target)) {
+      closeAdminActionsDropdown();
+    }
     const target = e.target.closest("button, #adminTriggerIcon");
     if (!target) return;
     const id = target.id;
@@ -1596,10 +1616,12 @@ This permanently removes them from the database.`)) return;
       downloadReceipt();
     }
     if (id === "btnRefreshAdmin") {
+      closeAdminActionsDropdown();
       if (state.dbConnected) refreshAdminDashboard();
       else alert("Database disconnected.");
     }
     if (id === "btnArchiveLogs") {
+      closeAdminActionsDropdown();
       if (state.dbConnected) archiveOldSessions();
       else alert("Database disconnected.");
     }
@@ -1635,7 +1657,8 @@ This permanently removes them from the database.`)) return;
       if (refNum && state.dbConnected) cancelAwaitingPayment(refNum);
       else if (!state.dbConnected) alert("Database disconnected.");
     }
-    if (id === "btnSalesReport") openSalesReportModal();
+    if (id === "btnAdminActions") toggleAdminActionsDropdown();
+    if (id === "btnSalesReport") { closeAdminActionsDropdown(); openSalesReportModal(); }
     if (id === "btnCloseSalesReport") closeSalesReportModal();
     if (id === "btnDownloadSalesReport") downloadSalesReport();
     if (target.classList.contains("btn-admin-extend")) {
