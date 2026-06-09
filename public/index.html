@@ -277,12 +277,19 @@
 
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-brand-border pb-6 mb-6">
       <div class="flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary shadow-inner">
-          <i data-lucide="lock" class="w-6 h-6"></i>
+        <!-- Logo + site name -->
+        <div class="w-12 h-12 brand-logo-container shrink-0">
+          <img src="/img/logo.jpg" alt="Han12 Logo" class="brand-logo-image">
         </div>
         <div>
-          <h2 class="text-2xl font-extrabold font-['Outfit'] text-brand-primary">Admin Operations Terminal</h2>
-          <p class="text-xs text-brand-neutral mt-1">Manage database sessions, authorize cashier sales, and view metrics.</p>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-extrabold font-['Outfit'] tracking-tight text-brand-primary">Han12</h1>
+            <span class="text-[10px] font-bold uppercase tracking-widest text-white bg-brand-primary px-2 py-0.5 rounded-md flex items-center gap-1">
+              <i data-lucide="lock" class="w-2.5 h-2.5"></i>
+              Admin
+            </span>
+          </div>
+          <p class="text-xs text-brand-neutral mt-0.5">Operations Terminal — sessions, approvals &amp; metrics</p>
         </div>
       </div>
       <div class="flex items-center space-x-2 flex-wrap gap-2">
