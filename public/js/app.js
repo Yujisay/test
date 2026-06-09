@@ -319,24 +319,6 @@
       wrapper.classList.toggle("hidden", duration !== "Custom");
     }
     updateFormPreview();
-    updateOnlineNoteVisibility();
-  }
-  function updateOnlineNoteVisibility() {
-    const duration = document.getElementById("durationSelect").value;
-    const onlineNote = document.getElementById("onlinePayNote");
-    const onlineOpenTimeNote = document.getElementById("onlineOpenTimeNote");
-    if (state.paymentMethod === "online") {
-      if (duration === "Open Time") {
-        onlineNote?.classList.add("hidden");
-        onlineOpenTimeNote?.classList.remove("hidden");
-      } else {
-        onlineNote?.classList.remove("hidden");
-        onlineOpenTimeNote?.classList.add("hidden");
-      }
-    } else {
-      onlineNote?.classList.add("hidden");
-      onlineOpenTimeNote?.classList.add("hidden");
-    }
   }
   function updateFormPreview() {
     const seatType = document.getElementById("seatTypeSelect").value;
@@ -395,28 +377,6 @@
     }
     if (window.lucide) lucide.createIcons();
   }
-  function selectPaymentMethod(method) {
-    state.paymentMethod = method;
-    const cashBtn = document.getElementById("payMethodCash");
-    const onlineBtn = document.getElementById("payMethodOnline");
-    const btnLabel = document.getElementById("btnConfirmLabel");
-    const active = ["border-brand-primary", "bg-brand-primary/10", "text-brand-primary"];
-    const inactive = ["border-brand-border", "bg-brand-surface", "text-brand-neutral"];
-    if (method === "cash") {
-      cashBtn.classList.remove(...inactive);
-      cashBtn.classList.add(...active);
-      onlineBtn.classList.remove(...active);
-      onlineBtn.classList.add(...inactive);
-      if (btnLabel) btnLabel.innerHTML = "Confirm &amp; Book";
-    } else {
-      onlineBtn.classList.remove(...inactive);
-      onlineBtn.classList.add(...active);
-      cashBtn.classList.remove(...active);
-      cashBtn.classList.add(...inactive);
-      if (btnLabel) btnLabel.textContent = "Pay Online \u2192";
-    }
-    updateOnlineNoteVisibility();
-  }
   async function initiateCheckout() {
     const fullName = document.getElementById("fullName").value.trim();
     const seatType = document.getElementById("seatTypeSelect").value;
@@ -469,48 +429,22 @@
       status: "PENDING SESSION",
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     };
-    if (state.paymentMethod === "online" && duration !== "Open Time") {
-      await initiateOnlinePayment(sessionData);
-    } else {
-      await initiateCashCheckout(sessionData);
-    }
+    await initiateCashCheckout(sessionData);
   }
   async function initiateCashCheckout(sessionData) {
     const db2 = getDb();
     try {
       showLoader("Processing...", "Creating your WiFi session...");
-      const payMethod = state.paymentMethod === "online" ? "ONLINE" : "CASH";
-      const data = { ...sessionData, status: "PENDING SESSION", paymentMethod: payMethod };
+      const data = { ...sessionData, status: "PENDING SESSION", paymentMethod: "CASH" };
       if (db2) {
         await db2.ref("sessions/" + data.referenceNumber).set(data);
         hideLoader();
-        showTicketModal(data);
+        openQRPaymentModal(data);
       }
     } catch (error) {
       console.error("Checkout Error:", error);
       hideLoader();
       alert("Checkout failed. Check your internet connection.");
-    }
-  }
-  async function initiateOnlinePayment(sessionData) {
-    try {
-      showLoader("Redirecting...", "Creating your secure payment link...");
-      const res = await fetch("/api/create-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sessionData)
-      });
-      const data = await res.json();
-      if (!res.ok || !data.invoiceUrl) {
-        hideLoader();
-        alert(data.error || "Failed to create payment link. Please try again.");
-        return;
-      }
-      window.location.href = data.invoiceUrl;
-    } catch (error) {
-      console.error("Online payment error:", error);
-      hideLoader();
-      alert("Could not connect to payment gateway. Please try Cash payment instead.");
     }
   }
 
@@ -807,45 +741,6 @@ Amount due: \u20B1${cost.toFixed(2)}
 
 Please proceed to the cashier desk and show this reference number. The cashier will extend your session once payment is received.`);
   }
-  async function confirmExtendOnline() {
-    if (!extendData) return;
-    const { refNum, record } = extendData;
-    const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;
-    const selected = document.querySelector('input[name="extendDuration"]:checked');
-    const hours = selected ? parseFloat(selected.value) : 1;
-    const cost = Math.round(hours * rate * 100) / 100;
-    const hoursLabel = hours === 0.5 ? "30 min" : `${hours}hr`;
-    try {
-      showLoader("Preparing...", "Setting up your extension payment...");
-      const res = await fetch("/api/create-extend-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          referenceNumber: refNum,
-          fullName: record.fullName,
-          seatType: record.seatType,
-          extensionHours: hours,
-          amount: cost
-        })
-      });
-      const data = await res.json();
-      hideLoader();
-      if (data.invoiceUrl) {
-        closeExtendModal();
-        window.location.href = data.invoiceUrl;
-      } else {
-        alert(`Could not create payment link. Please pay at the cashier desk.
-
-Ref#: ${refNum}
-Extension: +${hoursLabel}
-Amount: \u20B1${cost.toFixed(2)}`);
-      }
-    } catch (err) {
-      hideLoader();
-      console.error("Online extend payment error:", err);
-      alert("Payment link creation failed. Please pay at the cashier instead.");
-    }
-  }
   async function stopOpenTimeSession(refNum) {
     const db2 = getDb();
     if (!db2) return;
@@ -901,44 +796,59 @@ Please proceed to the cashier desk to complete your payment.`);
       alert("Failed to stop session. Please try again.");
     }
   }
-  async function confirmStopOnline() {
-    if (!stopSessionData) return;
-    const { refNum, record, finalAmount, timeLabel } = stopSessionData;
-    const db2 = getDb();
-    if (!db2) return;
-    try {
-      showLoader("Preparing...", "Setting up your online payment...");
-      const endTime = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
-      await db2.ref("sessions/" + refNum).update({
-        status: "EXPIRED",
-        amount: finalAmount,
-        endTime,
-        duration: `Open Time (${timeLabel})`
-      });
-      const res = await fetch("/api/create-stop-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          referenceNumber: refNum,
-          fullName: record.fullName,
-          seatType: record.seatType,
-          duration: `Open Time (${timeLabel})`,
-          amount: finalAmount
-        })
-      });
-      const data = await res.json();
-      hideLoader();
-      if (data.invoiceUrl) {
-        document.getElementById("stopSessionModal").classList.add("hidden");
-        stopSessionData = null;
-        window.location.href = data.invoiceUrl;
-      } else {
-        alert("Could not create payment link. Please pay at the cashier desk instead.\n\nRef#: " + refNum + "\nAmount: \u20B1" + finalAmount.toFixed(2));
+
+  // ============================================================
+  // QR PAYMENT MODAL
+  // CONFIG: Set QR image paths below to your actual QR code images.
+  // Place your QR images in /public/img/ and update paths here.
+  // ============================================================
+  var QR_CONFIG = {
+    gcash:   { label: "GCash — Scan to Pay",        image: "/img/qr-gcash.png"   },
+    paymaya: { label: "PayMaya / Maya — Scan to Pay", image: "/img/qr-paymaya.png" }
+  };
+  var _pendingQRRecord = null;
+  function openQRPaymentModal(record) {
+    _pendingQRRecord = record;
+    document.getElementById("qrStep1").classList.remove("hidden");
+    document.getElementById("qrStep2").classList.add("hidden");
+    document.getElementById("qrStep3").classList.add("hidden");
+    document.getElementById("qrPaymentModal").classList.remove("hidden");
+    if (window.lucide) lucide.createIcons();
+  }
+  function selectQRMethod(method) {
+    if (method === "other") {
+      showQRStep3();
+      return;
+    }
+    const config = QR_CONFIG[method];
+    const imgEl = document.getElementById("qrCodeImage");
+    const titleEl = document.getElementById("qrStep2Title");
+    if (imgEl && config) imgEl.src = config.image;
+    if (titleEl && config) titleEl.textContent = config.label;
+    document.getElementById("qrStep1").classList.add("hidden");
+    document.getElementById("qrStep2").classList.remove("hidden");
+    if (window.lucide) lucide.createIcons();
+  }
+  function showQRStep3() {
+    document.getElementById("qrStep1").classList.add("hidden");
+    document.getElementById("qrStep2").classList.add("hidden");
+    document.getElementById("qrStep3").classList.remove("hidden");
+    if (window.lucide) lucide.createIcons();
+  }
+  function closeQRAndViewSession() {
+    document.getElementById("qrPaymentModal").classList.add("hidden");
+    if (_pendingQRRecord) {
+      const name = _pendingQRRecord.fullName;
+      _pendingQRRecord = null;
+      switchTab("check");
+      const searchInput = document.getElementById("searchName");
+      if (searchInput) {
+        searchInput.value = name;
+        setTimeout(() => {
+          const btnSearch = document.getElementById("btnSearchSession");
+          if (btnSearch) btnSearch.click();
+        }, 150);
       }
-    } catch (err) {
-      hideLoader();
-      console.error("Online stop payment error:", err);
-      alert("Payment link creation failed. Please pay at the cashier instead.");
     }
   }
 
@@ -1658,8 +1568,6 @@ This permanently removes them from the database.`)) return;
     document.getElementById("seatTypeSelect")?.addEventListener("change", updateFormPreview);
     document.getElementById("durationSelect")?.addEventListener("change", onDurationChange);
     document.getElementById("customHours")?.addEventListener("input", updateFormPreview);
-    document.getElementById("payMethodCash")?.addEventListener("click", () => selectPaymentMethod("cash"));
-    document.getElementById("payMethodOnline")?.addEventListener("click", () => selectPaymentMethod("online"));
   }
   function handleGlobalClicks(e) {
     const target = e.target.closest("button, #adminTriggerIcon");
@@ -1750,7 +1658,6 @@ This permanently removes them from the database.`)) return;
     }
     if (id === "btnCloseExtend") closeExtendModal();
     if (id === "btnExtendPayCash") confirmExtendCash();
-    if (id === "btnExtendPayOnline") confirmExtendOnline();
     if (target.classList.contains("btn-customer-stop-session")) {
       const refNum = target.getAttribute("data-ref");
       if (refNum && state.dbConnected) stopOpenTimeSession(refNum);
@@ -1762,9 +1669,17 @@ This permanently removes them from the database.`)) return;
     if (id === "btnStopPayCash") {
       confirmStopCash();
     }
-    if (id === "btnStopPayOnline") {
-      confirmStopOnline();
+    if (target.classList.contains("qr-method-btn")) {
+      const method = target.getAttribute("data-method");
+      if (method) selectQRMethod(method);
     }
+    if (id === "btnQRDonePayment") showQRStep3();
+    if (id === "btnQRBack") {
+      document.getElementById("qrStep2").classList.add("hidden");
+      document.getElementById("qrStep1").classList.remove("hidden");
+      if (window.lucide) lucide.createIcons();
+    }
+    if (id === "btnQRViewSession") closeQRAndViewSession();
   }
   document.addEventListener("DOMContentLoaded", init);
   var lastBreakpoint = window.innerWidth < 768 ? "mobile" : "desktop";

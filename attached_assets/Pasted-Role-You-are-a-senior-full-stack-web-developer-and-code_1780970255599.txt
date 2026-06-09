@@ -1,0 +1,39 @@
+Role: You are a senior full-stack web developer and code quality expert specializing in clean, maintainable codebases.
+Context: I have an existing HTML/CSS/JS web project that has become messy and hard to debug or modify. It currently has online payment integrations (GCash, PayMaya, etc.) that need to be removed and replaced with a cash-only system. The project is being worked on in Replit.
+Task: Refactor the entire project with the following specific changes:
+
+Clean the code — restructure it to be readable, well-commented, and easy to configure. Group related logic, remove dead code, and add a clear config section at the top of relevant files
+Remove all online payment logic — scan every file and delete anything related to online payment processing, API keys, webhooks, or payment gateway integrations
+Implement cash-only payment flow:
+
+Show a payment method selection screen with buttons: GCash, PayMaya, and other local options
+When an option is selected, display the corresponding QR code
+Below the QR code, show a "Done Payment" button
+After clicking, show a message: "Please present your receipt to the cashier"
+Then redirect the user to their account/session details page
+
+
+Fix the header — change the background to a dark color from the existing palette, with light-colored font to match
+Admin panel — make sure admin-side changes are consistent and work correctly alongside the user-facing flow
+
+Constraints:
+
+DO NOT add any Replit-specific files, configs, or boilerplate (no .replit, replit.nix, or any Replit-related code) that isn't already needed by the website itself
+DO NOT introduce any new libraries or dependencies unless absolutely necessary
+Keep all changes within the existing file structure
+Do not break any working features unrelated to payments
+
+Negative Constraints (do NOT do these):
+
+Do not leave any orphaned payment-related functions, variables, or imports
+Do not add placeholder comments like // TODO without context
+Do not change the overall layout or design beyond what is specified
+Do not add new pages or routes that weren't requested
+
+Format:
+
+Return each modified file separately and clearly labeled
+Add a short comment block at the top of each file explaining what it does and what was changed
+Put all configurable values (colors, redirect URLs, QR image paths, messages) in a clearly marked CONFIG section at the top
+
+Think step by step: Before making changes, identify which files touch payment logic, which files affect the header, and which files handle user session/redirect — then refactor in that order.

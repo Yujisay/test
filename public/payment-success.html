@@ -1,13 +1,26 @@
 <!DOCTYPE html>
+<!--
+  payment-success.html
+  Confirmation screen shown after a user completes a QR payment
+  and a cashier manually activates their session.
+  No online payment gateway is used. This page is reached if
+  a user navigates here directly or is linked from a confirmation flow.
+  Changed: Removed all Xendit/API payment-status fetch logic.
+           Now shows a simple receipt-presentation prompt.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Successful — Study Hub</title>
+  <title>Booking Confirmed — Han12 Study Hub</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
-      theme: { extend: { colors: { brand: { primary: '#535C3B', secondary: '#E5D3B3', accent: '#C8A374', neutral: '#707070', dark: '#373737', light: '#FDFCFB', surface: '#FFFFFF', border: '#E8E2D9' } } } }
+      theme: { extend: { colors: { brand: {
+        primary: '#535C3B', secondary: '#E5D3B3', accent: '#C8A374',
+        neutral: '#707070', dark: '#373737', light: '#FDFCFB',
+        surface: '#FFFFFF', border: '#E8E2D9'
+      } } } }
     }
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -15,13 +28,21 @@
 </head>
 <body class="min-h-screen bg-brand-light font-['Inter'] flex items-center justify-center px-4">
   <div class="w-full max-w-sm text-center space-y-6">
+
+    <!-- Success Icon -->
     <div class="w-20 h-20 rounded-full bg-emerald-100 border-4 border-emerald-200 flex items-center justify-center mx-auto">
       <i data-lucide="check-circle-2" class="w-10 h-10 text-emerald-600"></i>
     </div>
+
+    <!-- Title -->
     <div>
-      <h1 class="text-2xl font-extrabold font-['Outfit'] text-brand-dark">Payment Successful!</h1>
-      <p class="text-sm text-brand-neutral mt-2 leading-relaxed">Your WiFi session payment has been received. Please proceed to the Study Hub cashier to activate your session.</p>
+      <h1 class="text-2xl font-extrabold font-['Outfit'] text-brand-dark">Session Booked!</h1>
+      <p class="text-sm text-brand-neutral mt-2 leading-relaxed">
+        Your WiFi session has been registered. Please show your payment receipt to the cashier to get activated.
+      </p>
     </div>
+
+    <!-- Reference number (if passed in URL) -->
     <div class="bg-brand-surface border border-brand-border rounded-2xl p-5 space-y-3 text-sm text-left">
       <div class="flex justify-between">
         <span class="text-brand-neutral">Reference No.</span>
@@ -29,73 +50,39 @@
       </div>
       <div class="flex justify-between">
         <span class="text-brand-neutral">Status</span>
-        <span class="font-bold text-emerald-600 uppercase text-xs bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200" id="statusBadge">Checking...</span>
+        <span class="font-bold text-amber-600 uppercase text-xs bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Pending Activation</span>
       </div>
     </div>
+
+    <!-- Cashier instruction callout -->
     <div class="p-4 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700 text-left flex items-start gap-2">
       <i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0"></i>
-      <span>Show this page or your reference number to the cashier. Your WiFi will be activated once they confirm your seat.</span>
+      <span>
+        <strong>Please present your receipt to the cashier.</strong><br>
+        Show your GCash / PayMaya payment screenshot to the cashier. Your WiFi will be activated once they confirm your seat.
+      </span>
     </div>
 
-    <!-- Auto-redirect countdown -->
-    <div id="redirectNotice" class="hidden p-3 bg-brand-primary/5 border border-brand-primary/20 rounded-xl text-xs text-brand-primary font-semibold flex items-center justify-center gap-2">
-      <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
-      Redirecting to Session Dashboard in <span id="countdown">5</span>s…
-    </div>
-
-    <a id="dashboardLink" href="/" class="block w-full py-3.5 rounded-2xl bg-brand-primary text-white font-bold font-['Outfit'] text-sm hover:bg-brand-primary/90 transition-all">
-      Go to My Session Dashboard
+    <!-- Go to session dashboard -->
+    <a id="dashboardLink" href="/?tab=check"
+      class="block w-full py-3.5 rounded-2xl bg-brand-primary text-white font-bold font-['Outfit'] text-sm hover:bg-brand-primary/90 transition-all">
+      View My Session
     </a>
+
   </div>
   <script>
     if (window.lucide) lucide.createIcons();
     window.addEventListener('load', () => { if (window.lucide) lucide.createIcons(); });
 
+    // Read optional ref param from URL (e.g. /?ref=ABC123)
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref') || '—';
-    const autoRedirect = params.get('tab') === 'check';
-
     document.getElementById('refNum').textContent = ref;
 
+    // Update dashboard link to pre-load the session search
     if (ref !== '—') {
-      const dashLink = document.getElementById('dashboardLink');
-      if (dashLink) dashLink.href = '/?tab=check&ref=' + ref;
-
-      fetch('/api/payment-status/' + ref)
-        .then(r => r.json())
-        .then(data => {
-          const badge = document.getElementById('statusBadge');
-          if (data.status === 'PENDING SESSION') {
-            badge.textContent = 'PAID — PENDING ACTIVATION';
-          } else if (data.status === 'ACTIVE') {
-            badge.textContent = 'ACTIVE';
-          } else if (data.status === 'EXPIRED') {
-            badge.textContent = 'PAYMENT CONFIRMED';
-          } else {
-            badge.textContent = data.status || 'PAID';
-          }
-          startAutoRedirect();
-        })
-        .catch(() => {
-          document.getElementById('statusBadge').textContent = 'PAID';
-          startAutoRedirect();
-        });
-    }
-
-    function startAutoRedirect() {
-      if (!autoRedirect || ref === '—') return;
-      const notice = document.getElementById('redirectNotice');
-      const countdownEl = document.getElementById('countdown');
-      if (notice) notice.classList.remove('hidden');
-      let secs = 5;
-      const timer = setInterval(() => {
-        secs--;
-        if (countdownEl) countdownEl.textContent = String(secs);
-        if (secs <= 0) {
-          clearInterval(timer);
-          window.location.href = '/?tab=check&ref=' + ref;
-        }
-      }, 1000);
+      const link = document.getElementById('dashboardLink');
+      if (link) link.href = '/?tab=check&ref=' + ref;
     }
   </script>
 </body>
