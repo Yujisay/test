@@ -6,10 +6,8 @@ import { getDb, sessionKey } from './firebase';
 
 export function computeSessionTimes(hours: number, duration: string): SessionTimes {
   const now = new Date();
-  const minutes = now.getMinutes();
-  const roundedMinutes = Math.ceil(minutes / 15) * 15;
-  now.setMinutes(roundedMinutes);
   now.setSeconds(0);
+  now.setMilliseconds(0);
 
   const startTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
   let endTime: string;

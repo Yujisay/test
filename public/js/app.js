@@ -360,10 +360,8 @@
   init_firebase();
   function computeSessionTimes(hours, duration) {
     const now = /* @__PURE__ */ new Date();
-    const minutes = now.getMinutes();
-    const roundedMinutes = Math.ceil(minutes / 15) * 15;
-    now.setMinutes(roundedMinutes);
     now.setSeconds(0);
+    now.setMilliseconds(0);
     const startTime = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
     let endTime;
     if (duration === "Open Time") {
