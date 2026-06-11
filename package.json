@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "WiFi Captive Portal with QR code and cash payment",
   "engines": {
-  "node": "18.x"
-},
+    "node": "18.x"
+  },
   "scripts": {
     "build": "esbuild src/main.ts --bundle --outfile=public/js/app.js --platform=browser && esbuild src/admin-page.ts --bundle --outfile=public/js/admin.js --platform=browser",
     "start": "npm run build && ts-node server.ts"
