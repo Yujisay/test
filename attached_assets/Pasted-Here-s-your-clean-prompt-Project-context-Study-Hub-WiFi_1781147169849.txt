@@ -1,0 +1,31 @@
+Here's your clean prompt:
+
+---
+
+> **Project context:** Study Hub WiFi Captive Portal. Compiled vanilla JavaScript, no framework, no bundler. Backend is Firebase Realtime Database using the compat SDK loaded via CDN. All session data lives in Firebase — no localStorage.
+>
+> Do not add any Replit-specific files, build tools, package managers, or dependencies. Do not create new files. Only modify the existing frontend JavaScript files.
+>
+> Fix the following three bugs:
+>
+> ---
+>
+> **Bug 1 — Session search is case-sensitive**
+>
+> When a customer searches for their session by name, the search only returns results if the casing matches exactly. Typing lowercase finds nothing if the name was saved in title case. Fix the search so it works regardless of how the name was typed — uppercase, lowercase, or mixed. Partial name matches should also work, so typing part of a name still finds the correct session. The same case-insensitive partial matching should also apply when searching by reference number.
+>
+> ---
+>
+> **Bug 2 — Admin ending a session does not update the customer's screen**
+>
+> When the admin ends a session from the dashboard, the Firebase record is updated correctly but the customer's session card still shows the session as active. The customer has to manually refresh the page to see that their session has ended. Fix this so the customer's screen automatically reflects the expired status within a second or two of the admin ending it — no refresh required. The admin table should also re-render immediately after ending a session so the row shows the correct expired status without a manual refresh.
+>
+> ---
+>
+> **Bug 3 — Session does not auto-expire when the countdown reaches zero**
+>
+> When the session timer counts down to zero, the Firebase record is updated to expired but the customer's session card still displays as active. The customer has to refresh the page to see that their session has ended. Fix this so the moment the timer hits zero, the session card automatically re-renders to show the expired state — no manual refresh needed.
+>
+> ---
+>
+> Do not add Replit files, npm files, build config, or any files unrelated to these three fixes.
