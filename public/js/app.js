@@ -516,6 +516,9 @@
   var extendData = null;
   var currentSessionRef = null;
   var currentSessionListener = null;
+  var currentSearchMatches = [];
+  var currentSearchDb = null;
+  var currentExpandedKey = null;
   function detachSessionListener() {
     if (currentSessionRef && currentSessionListener) {
       currentSessionRef.off("value", currentSessionListener);
@@ -617,6 +620,7 @@
   async function checkSessionStatus() {
     clearCountdown();
     detachSessionListener();
+    currentExpandedKey = null;
     const db2 = getDb();
     const query = document.getElementById("searchName").value.trim();
     if (!query || !db2) return;
@@ -636,19 +640,7 @@
         });
         if (matches.length > 0) {
           matches.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-          const best = matches[0];
-          renderSessionCard(best);
-          const key = sessionKey(best);
-          currentSessionRef = db2.ref("sessions/" + key);
-          currentSessionListener = function(snap) {
-            if (!snap.exists()) return;
-            const updated = snap.val();
-            if (currentViewingRecord && updated.status !== currentViewingRecord.status) {
-              clearCountdown();
-              renderSessionCard(updated);
-            }
-          };
-          currentSessionRef.on("value", currentSessionListener);
+          renderSearchResultsList(matches, db2);
         } else {
           renderNoRecordFound(query);
         }
@@ -660,10 +652,70 @@
       renderNoRecordFound(query + " (Error)");
     }
   }
-  function renderSessionCard(record) {
+  function attachListenerForRecord(record, db2, containerEl) {
+    if (!db2) return;
+    const key = sessionKey(record);
+    currentSessionRef = db2.ref("sessions/" + key);
+    currentSessionListener = function(snap) {
+      if (!snap.exists()) return;
+      const updated = snap.val();
+      if (currentViewingRecord && updated.status !== currentViewingRecord.status) {
+        clearCountdown();
+        const idx = currentSearchMatches.findIndex((r) => sessionKey(r) === key);
+        if (idx !== -1) currentSearchMatches[idx] = updated;
+        if (containerEl) {
+          renderSessionCard(updated, containerEl);
+        } else {
+          renderSessionCard(updated);
+        }
+      }
+    };
+    currentSessionRef.on("value", currentSessionListener);
+  }
+  function renderSearchResultsList(matches, db2) {
+    currentSearchMatches = matches;
+    currentSearchDb = db2;
+    currentExpandedKey = null;
+    if (matches.length === 1) {
+      renderSessionCard(matches[0]);
+      attachListenerForRecord(matches[0], db2, null);
+      return;
+    }
+    const resultsDiv = document.getElementById("checkResultContainer");
+    const listHtml = matches.map((r) => {
+      const key = sessionKey(r);
+      const sc = r.status === "ACTIVE" ? "text-emerald-700 bg-emerald-50 border-emerald-200" : r.status === "PENDING SESSION" ? "text-amber-700 bg-amber-50 border-amber-200" : r.status === "AWAITING PAYMENT" ? "text-blue-700 bg-blue-50 border-blue-200" : "text-brand-neutral bg-brand-light border-brand-border";
+      return `
+        <div class="session-result-item bg-brand-surface border border-brand-border rounded-2xl overflow-hidden shadow-soft" data-key="${key}">
+          <button class="session-result-toggle w-full px-4 py-3 flex items-center justify-between gap-3 hover:bg-brand-light transition-all" data-key="${key}">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="font-mono font-bold text-brand-primary text-sm shrink-0">${r.referenceNumber}</span>
+              <div class="min-w-0 text-left">
+                <span class="font-semibold text-sm text-brand-dark block truncate">${r.fullName}</span>
+                <span class="text-[10px] text-brand-neutral">${r.seatType} \u00b7 ${r.bookingDate}</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-lg border ${sc}">${r.status}</span>
+              <i data-lucide="chevron-down" class="result-chevron w-4 h-4 text-brand-neutral" style="transition:transform 0.2s"></i>
+            </div>
+          </button>
+          <div class="session-result-detail hidden px-2 pb-3"></div>
+        </div>`;
+    }).join("");
+    resultsDiv.innerHTML = `
+      <div class="space-y-2 animate-fade-in">
+        <p class="text-[11px] text-brand-neutral mb-1 px-1">${matches.length} sessions found \u2014 tap one to expand</p>
+        ${listHtml}
+        <button id="btnClearSearch" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Search Again</button>
+      </div>`;
+    if (window.lucide) lucide.createIcons();
+  }
+  function renderSessionCard(record, containerEl) {
     currentViewingRecord = record;
     autoExpireHandled = false;
-    const resultsDiv = document.getElementById("checkResultContainer");
+    const resultsDiv = containerEl || document.getElementById("checkResultContainer");
+    const inList = !!containerEl;
     const statusColor = record.status === "ACTIVE" ? "text-emerald-600 bg-emerald-50 border-emerald-200" : record.status === "PENDING SESSION" ? "text-amber-600 bg-amber-50 border-amber-200" : "text-brand-neutral bg-brand-light border-brand-border";
     const isOpenTime = record.duration === "Open Time" || record.duration.startsWith("Open Time");
     const isActive = record.status === "ACTIVE";
@@ -762,7 +814,7 @@
         </div>
       </div>
       ${timerSection}
-      <button id="btnClearSearch" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Search Again</button>
+      ${!inList ? `<button id="btnClearSearch" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Search Again</button>` : ""}
     </div>
   `;
     if (window.lucide) lucide.createIcons();
@@ -793,6 +845,9 @@
     clearCountdown();
     detachSessionListener();
     currentViewingRecord = null;
+    currentSearchMatches = [];
+    currentSearchDb = null;
+    currentExpandedKey = null;
     document.getElementById("searchName").value = "";
     document.getElementById("checkResultContainer").classList.add("hidden");
     document.getElementById("checkEmptyState").classList.remove("hidden");
@@ -937,7 +992,7 @@ Amount: \u20B1${cost.toFixed(2)}`);
   }
   async function confirmStopCash() {
     if (!stopSessionData) return;
-    const { refNum, finalAmount, timeLabel } = stopSessionData;
+    const { refNum, record, finalAmount, timeLabel } = stopSessionData;
     const db2 = getDb();
     if (!db2) return;
     try {
@@ -951,14 +1006,14 @@ Amount: \u20B1${cost.toFixed(2)}`);
       });
       hideLoader();
       document.getElementById("stopSessionModal").classList.add("hidden");
-      stopSessionData = null;
       alert(`Session stopped.
 
-Ref#: ${stopSessionData.record.referenceNumber}
+Ref#: ${record.referenceNumber}
 Time Used: ${timeLabel}
 Amount Due: \u20B1${finalAmount.toFixed(2)}
 
 Please proceed to the cashier desk to complete your payment.`);
+      stopSessionData = null;
       clearSearchLookup();
     } catch (err) {
       hideLoader();
@@ -1150,6 +1205,38 @@ Please proceed to the cashier desk to complete your payment.`);
       else alert("Cannot search while database is disconnected.");
     }
     if (id === "btnClearSearch" || id === "btnRetrySearch") clearSearchLookup();
+    if (target.classList.contains("session-result-toggle")) {
+      const key = target.getAttribute("data-key");
+      if (!key) return;
+      const isSameKey = currentExpandedKey === key;
+      if (currentExpandedKey) {
+        const prevItem = document.querySelector(`.session-result-item[data-key="${currentExpandedKey}"]`);
+        if (prevItem) {
+          const prevDetail = prevItem.querySelector(".session-result-detail");
+          prevDetail.classList.add("hidden");
+          prevDetail.innerHTML = "";
+          const prevChev = prevItem.querySelector(".result-chevron");
+          if (prevChev) prevChev.style.transform = "";
+        }
+        clearCountdown();
+        detachSessionListener();
+        currentViewingRecord = null;
+        currentExpandedKey = null;
+      }
+      if (isSameKey) return;
+      const record = currentSearchMatches.find((r) => sessionKey(r) === key);
+      if (!record) return;
+      const item = document.querySelector(`.session-result-item[data-key="${key}"]`);
+      if (!item) return;
+      const detailEl = item.querySelector(".session-result-detail");
+      detailEl.classList.remove("hidden");
+      const chev = item.querySelector(".result-chevron");
+      if (chev) chev.style.transform = "rotate(180deg)";
+      currentExpandedKey = key;
+      renderSessionCard(record, detailEl);
+      attachListenerForRecord(record, currentSearchDb, detailEl);
+      return;
+    }
     if (id === "btnCloseTicket" || id === "btnDoneTicket") closeTicketModal();
     if (id === "btnDownloadReceipt") {
       e.stopPropagation();
