@@ -514,6 +514,15 @@
   var currentViewingRecord = null;
   var stopSessionData = null;
   var extendData = null;
+  var currentSessionRef = null;
+  var currentSessionListener = null;
+  function detachSessionListener() {
+    if (currentSessionRef && currentSessionListener) {
+      currentSessionRef.off("value", currentSessionListener);
+      currentSessionRef = null;
+      currentSessionListener = null;
+    }
+  }
   function clearCountdown() {
     if (countdownInterval !== null) {
       clearInterval(countdownInterval);
@@ -607,9 +616,10 @@
   }
   async function checkSessionStatus() {
     clearCountdown();
+    detachSessionListener();
     const db2 = getDb();
-    const name = document.getElementById("searchName").value.trim();
-    if (!name || !db2) return;
+    const query = document.getElementById("searchName").value.trim();
+    if (!query || !db2) return;
     const resultsDiv = document.getElementById("checkResultContainer");
     const emptyState = document.getElementById("checkEmptyState");
     emptyState.classList.add("hidden");
@@ -617,17 +627,37 @@
     resultsDiv.innerHTML = `<div class="p-12 text-center"><i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto text-brand-primary"></i></div>`;
     if (window.lucide) lucide.createIcons();
     try {
-      const snapshot = await db2.ref("sessions").orderByChild("fullName").equalTo(name).once("value");
+      const snapshot = await db2.ref("sessions").once("value");
       if (snapshot.exists()) {
-        const records = Object.values(snapshot.val());
-        records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        renderSessionCard(records[0]);
+        const allRecords = Object.values(snapshot.val());
+        const q = query.toLowerCase();
+        const matches = allRecords.filter((r) => {
+          return (r.fullName && r.fullName.toLowerCase().includes(q)) || (r.referenceNumber && r.referenceNumber.toLowerCase().includes(q));
+        });
+        if (matches.length > 0) {
+          matches.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          const best = matches[0];
+          renderSessionCard(best);
+          const key = sessionKey(best);
+          currentSessionRef = db2.ref("sessions/" + key);
+          currentSessionListener = function(snap) {
+            if (!snap.exists()) return;
+            const updated = snap.val();
+            if (currentViewingRecord && updated.status !== currentViewingRecord.status) {
+              clearCountdown();
+              renderSessionCard(updated);
+            }
+          };
+          currentSessionRef.on("value", currentSessionListener);
+        } else {
+          renderNoRecordFound(query);
+        }
       } else {
-        renderNoRecordFound(name);
+        renderNoRecordFound(query);
       }
     } catch (error) {
       console.error("Query Error:", error);
-      renderNoRecordFound(name + " (Error)");
+      renderNoRecordFound(query + " (Error)");
     }
   }
   function renderSessionCard(record) {
@@ -746,6 +776,7 @@
   }
   function clearSearchLookup() {
     clearCountdown();
+    detachSessionListener();
     currentViewingRecord = null;
     document.getElementById("searchName").value = "";
     document.getElementById("checkResultContainer").classList.add("hidden");
