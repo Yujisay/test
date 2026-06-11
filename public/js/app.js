@@ -585,6 +585,90 @@
   // src/session.ts
   init_config();
   init_firebase();
+  var sessionCache = null;
+  async function fetchAllSessions() {
+    const db2 = getDb();
+    if (!db2) return [];
+    if (sessionCache) return sessionCache;
+    const snapshot = await db2.ref("sessions").once("value");
+    if (!snapshot.exists()) return [];
+    sessionCache = Object.values(snapshot.val());
+    return sessionCache;
+  }
+  function highlightMatch(name, query) {
+    if (!query) return name;
+    const lower = name.toLowerCase();
+    const q = query.toLowerCase();
+    const idx = lower.indexOf(q);
+    if (idx === -1) return name;
+    return name.slice(0, idx) + `<mark class="bg-brand-primary/20 text-brand-primary rounded px-0.5 not-italic">${name.slice(idx, idx + query.length)}</mark>` + name.slice(idx + query.length);
+  }
+  function renderSearchResultsList(records, query) {
+    const resultsDiv = document.getElementById("checkResultContainer");
+    const emptyState = document.getElementById("checkEmptyState");
+    emptyState.classList.add("hidden");
+    resultsDiv.classList.remove("hidden");
+    const items = records.map((r) => {
+      const key = sessionKey(r);
+      const statusColor = r.status === "ACTIVE" ? "text-emerald-600 bg-emerald-50 border-emerald-200" : r.status === "PENDING SESSION" ? "text-amber-600 bg-amber-50 border-amber-200" : "text-brand-neutral bg-brand-light border-brand-border";
+      return `
+      <div class="search-result-item cursor-pointer flex items-center gap-3 p-3 bg-brand-surface border border-brand-border rounded-xl
+                  hover:border-brand-primary/40 hover:bg-brand-primary/5 active:scale-[0.98] transition-all select-none"
+           data-key="${key}">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-bold text-brand-dark truncate">${highlightMatch(r.fullName, query)}</p>
+          <p class="text-[10px] text-brand-neutral mt-0.5">${r.seatType} \xB7 ${r.duration}</p>
+        </div>
+        <span class="text-[9px] font-bold uppercase px-2 py-1 rounded-md border shrink-0 ${statusColor}">${r.status}</span>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-brand-neutral shrink-0"></i>
+      </div>`;
+    }).join("");
+    resultsDiv.innerHTML = `
+    <div class="space-y-2 animate-fade-in">
+      <p class="text-[10px] text-brand-neutral px-1">${records.length} result${records.length !== 1 ? "s" : ""} found</p>
+      ${items}
+    </div>`;
+    if (window.lucide) lucide.createIcons();
+    resultsDiv.querySelectorAll(".search-result-item").forEach((el) => {
+      el.addEventListener("click", () => {
+        const key = el.getAttribute("data-key");
+        if (!key) return;
+        const record = records.find((r) => sessionKey(r) === key);
+        if (record) {
+          clearCountdown();
+          renderSessionCard(record);
+        }
+      });
+    });
+  }
+  async function liveSearch(query) {
+    const q = query.trim();
+    const resultsDiv = document.getElementById("checkResultContainer");
+    const emptyState = document.getElementById("checkEmptyState");
+    if (!q) {
+      resultsDiv.classList.add("hidden");
+      emptyState.classList.remove("hidden");
+      clearCountdown();
+      currentViewingRecord = null;
+      return;
+    }
+    const db2 = getDb();
+    if (!db2) return;
+    const all = await fetchAllSessions();
+    const lower = q.toLowerCase();
+    const statusOrder = { ACTIVE: 0, "PENDING SESSION": 1, "AWAITING PAYMENT": 2, EXPIRED: 3 };
+    const matches = all.filter((r) => r.fullName.toLowerCase().includes(lower)).sort((a, b) => {
+      const sa = statusOrder[a.status] ?? 4;
+      const sb = statusOrder[b.status] ?? 4;
+      if (sa !== sb) return sa - sb;
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+    if (matches.length === 0) {
+      renderNoRecordFound(q);
+      return;
+    }
+    renderSearchResultsList(matches, q);
+  }
   var countdownInterval = null;
   var elapsedInterval = null;
   var autoExpireHandled = false;
@@ -683,29 +767,9 @@
     elapsedInterval = setInterval(tick, 1e3);
   }
   async function checkSessionStatus() {
-    clearCountdown();
-    const db2 = getDb();
     const name = document.getElementById("searchName").value.trim();
-    if (!name || !db2) return;
-    const resultsDiv = document.getElementById("checkResultContainer");
-    const emptyState = document.getElementById("checkEmptyState");
-    emptyState.classList.add("hidden");
-    resultsDiv.classList.remove("hidden");
-    resultsDiv.innerHTML = `<div class="p-12 text-center"><i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto text-brand-primary"></i></div>`;
-    if (window.lucide) lucide.createIcons();
-    try {
-      const snapshot = await db2.ref("sessions").orderByChild("fullName").equalTo(name).once("value");
-      if (snapshot.exists()) {
-        const records = Object.values(snapshot.val());
-        records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        renderSessionCard(records[0]);
-      } else {
-        renderNoRecordFound(name);
-      }
-    } catch (error) {
-      console.error("Query Error:", error);
-      renderNoRecordFound(name + " (Error)");
-    }
+    sessionCache = null;
+    await liveSearch(name);
   }
   function renderSessionCard(record) {
     currentViewingRecord = record;
@@ -825,6 +889,7 @@
   function clearSearchLookup() {
     clearCountdown();
     currentViewingRecord = null;
+    sessionCache = null;
     document.getElementById("searchName").value = "";
     document.getElementById("checkResultContainer").classList.add("hidden");
     document.getElementById("checkEmptyState").classList.remove("hidden");
@@ -1100,6 +1165,12 @@ Please proceed to the cashier desk to complete your payment.`);
     document.getElementById("durationSelect")?.addEventListener("change", onDurationChange);
   }
   function setupListeners() {
+    let searchDebounce = null;
+    document.getElementById("searchName")?.addEventListener("input", (e) => {
+      const query = e.target.value;
+      if (searchDebounce) clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => liveSearch(query), 300);
+    });
     document.getElementById("searchName")?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();

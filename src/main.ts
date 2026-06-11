@@ -9,7 +9,7 @@ import {
   selectPaymentMethod, initiateCheckout
 } from './booking';
 import {
-  checkSessionStatus, clearSearchLookup,
+  checkSessionStatus, clearSearchLookup, liveSearch,
   stopOpenTimeSession, confirmStopCash, confirmStopOnline,
   openExtendModal, closeExtendModal, updateExtendCostPreview,
   confirmExtendCash, confirmExtendOnline
@@ -116,6 +116,14 @@ function setupFormDropdowns(): void {
 }
 
 function setupListeners(): void {
+  let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  document.getElementById('searchName')?.addEventListener('input', (e: Event) => {
+    const query = (e.target as HTMLInputElement).value;
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => liveSearch(query), 300);
+  });
+
   document.getElementById("searchName")?.addEventListener("keydown", (e: KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); checkSessionStatus(); }
   });

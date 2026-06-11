@@ -3,6 +3,113 @@ import { getDb, sessionKey } from './firebase';
 import { SessionRecord } from './types';
 import { showLoader, hideLoader } from './ui';
 
+// ─── Session cache (shared across live search & button search) ────────────────
+let sessionCache: SessionRecord[] | null = null;
+
+async function fetchAllSessions(): Promise<SessionRecord[]> {
+  const db = getDb();
+  if (!db) return [];
+  if (sessionCache) return sessionCache;
+  const snapshot = await db.ref('sessions').once('value');
+  if (!snapshot.exists()) return [];
+  sessionCache = Object.values(snapshot.val()) as SessionRecord[];
+  return sessionCache;
+}
+
+function highlightMatch(name: string, query: string): string {
+  if (!query) return name;
+  const lower = name.toLowerCase();
+  const q = query.toLowerCase();
+  const idx = lower.indexOf(q);
+  if (idx === -1) return name;
+  return (
+    name.slice(0, idx) +
+    `<mark class="bg-brand-primary/20 text-brand-primary rounded px-0.5 not-italic">${name.slice(idx, idx + query.length)}</mark>` +
+    name.slice(idx + query.length)
+  );
+}
+
+function renderSearchResultsList(records: SessionRecord[], query: string): void {
+  const resultsDiv = document.getElementById('checkResultContainer') as HTMLElement;
+  const emptyState = document.getElementById('checkEmptyState') as HTMLElement;
+  emptyState.classList.add('hidden');
+  resultsDiv.classList.remove('hidden');
+
+  const items = records.map(r => {
+    const key = sessionKey(r);
+    const statusColor = r.status === 'ACTIVE'
+      ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+      : r.status === 'PENDING SESSION'
+        ? 'text-amber-600 bg-amber-50 border-amber-200'
+        : 'text-brand-neutral bg-brand-light border-brand-border';
+    return `
+      <div class="search-result-item cursor-pointer flex items-center gap-3 p-3 bg-brand-surface border border-brand-border rounded-xl
+                  hover:border-brand-primary/40 hover:bg-brand-primary/5 active:scale-[0.98] transition-all select-none"
+           data-key="${key}">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-bold text-brand-dark truncate">${highlightMatch(r.fullName, query)}</p>
+          <p class="text-[10px] text-brand-neutral mt-0.5">${r.seatType} · ${r.duration}</p>
+        </div>
+        <span class="text-[9px] font-bold uppercase px-2 py-1 rounded-md border shrink-0 ${statusColor}">${r.status}</span>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-brand-neutral shrink-0"></i>
+      </div>`;
+  }).join('');
+
+  resultsDiv.innerHTML = `
+    <div class="space-y-2 animate-fade-in">
+      <p class="text-[10px] text-brand-neutral px-1">${records.length} result${records.length !== 1 ? 's' : ''} found</p>
+      ${items}
+    </div>`;
+
+  if (window.lucide) lucide.createIcons();
+
+  resultsDiv.querySelectorAll('.search-result-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const key = (el as HTMLElement).getAttribute('data-key');
+      if (!key) return;
+      const record = records.find(r => sessionKey(r) === key);
+      if (record) { clearCountdown(); renderSessionCard(record); }
+    });
+  });
+}
+
+export async function liveSearch(query: string): Promise<void> {
+  const q = query.trim();
+  const resultsDiv = document.getElementById('checkResultContainer') as HTMLElement;
+  const emptyState = document.getElementById('checkEmptyState') as HTMLElement;
+
+  if (!q) {
+    resultsDiv.classList.add('hidden');
+    emptyState.classList.remove('hidden');
+    clearCountdown();
+    currentViewingRecord = null;
+    return;
+  }
+
+  const db = getDb();
+  if (!db) return;
+
+  const all = await fetchAllSessions();
+  const lower = q.toLowerCase();
+  const statusOrder: Record<string, number> = { ACTIVE: 0, 'PENDING SESSION': 1, 'AWAITING PAYMENT': 2, EXPIRED: 3 };
+
+  const matches = all
+    .filter(r => r.fullName.toLowerCase().includes(lower))
+    .sort((a, b) => {
+      const sa = statusOrder[a.status] ?? 4;
+      const sb = statusOrder[b.status] ?? 4;
+      if (sa !== sb) return sa - sb;
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+
+  if (matches.length === 0) {
+    renderNoRecordFound(q);
+    return;
+  }
+
+  renderSearchResultsList(matches, q);
+}
+
 let countdownInterval: ReturnType<typeof setInterval> | null = null;
 let elapsedInterval: ReturnType<typeof setInterval> | null = null;
 let autoExpireHandled = false;
@@ -120,32 +227,9 @@ function startElapsedTimer(startTimestamp: string): void {
 }
 
 export async function checkSessionStatus(): Promise<void> {
-  clearCountdown();
-  const db = getDb();
-  const name = (document.getElementById("searchName") as HTMLInputElement).value.trim();
-  if (!name || !db) return;
-
-  const resultsDiv = document.getElementById("checkResultContainer") as HTMLElement;
-  const emptyState = document.getElementById("checkEmptyState") as HTMLElement;
-
-  emptyState.classList.add("hidden");
-  resultsDiv.classList.remove("hidden");
-  resultsDiv.innerHTML = `<div class="p-12 text-center"><i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto text-brand-primary"></i></div>`;
-  if (window.lucide) lucide.createIcons();
-
-  try {
-    const snapshot = await db.ref('sessions').orderByChild('fullName').equalTo(name).once('value');
-    if (snapshot.exists()) {
-      const records: SessionRecord[] = Object.values(snapshot.val());
-      records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      renderSessionCard(records[0]);
-    } else {
-      renderNoRecordFound(name);
-    }
-  } catch (error) {
-    console.error("Query Error:", error);
-    renderNoRecordFound(name + " (Error)");
-  }
+  const name = (document.getElementById('searchName') as HTMLInputElement).value.trim();
+  sessionCache = null; // force fresh fetch on explicit search
+  await liveSearch(name);
 }
 
 export function renderSessionCard(record: SessionRecord): void {
@@ -280,9 +364,10 @@ export function renderNoRecordFound(name: string): void {
 export function clearSearchLookup(): void {
   clearCountdown();
   currentViewingRecord = null;
-  (document.getElementById("searchName") as HTMLInputElement).value = "";
-  (document.getElementById("checkResultContainer") as HTMLElement).classList.add("hidden");
-  (document.getElementById("checkEmptyState") as HTMLElement).classList.remove("hidden");
+  sessionCache = null;
+  (document.getElementById('searchName') as HTMLInputElement).value = '';
+  (document.getElementById('checkResultContainer') as HTMLElement).classList.add('hidden');
+  (document.getElementById('checkEmptyState') as HTMLElement).classList.remove('hidden');
 }
 
 // ─── Extend session ───────────────────────────────────────────────────────────
