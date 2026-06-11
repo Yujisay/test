@@ -11,6 +11,7 @@ export interface SessionRecord {
   status: 'PENDING SESSION' | 'ACTIVE' | 'EXPIRED' | 'AWAITING PAYMENT';
   paymentMethod?: 'CASH' | 'ONLINE';
   timestamp: string;
+  activatedAt?: string;
   xenditInvoiceId?: string;
   xenditInvoiceUrl?: string;
   paidAt?: string;

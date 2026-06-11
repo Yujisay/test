@@ -254,8 +254,9 @@ export function renderSessionCard(record: SessionRecord): void {
 
   if (isActive && !isOpenTime && record.endTime) {
     setTimeout(() => startCountdown(record.endTime, record.bookingDate), 50);
-  } else if (isActive && isOpenTime && record.timestamp) {
-    setTimeout(() => startElapsedTimer(record.timestamp), 50);
+  } else if (isActive && isOpenTime) {
+    const activatedTs = record.activatedAt || record.timestamp;
+    setTimeout(() => startElapsedTimer(activatedTs), 50);
   }
 }
 
@@ -391,7 +392,7 @@ export async function stopOpenTimeSession(refNum: string): Promise<void> {
 
   if (!record) return;
 
-  const elapsedMs = Date.now() - new Date(record.timestamp).getTime();
+  const elapsedMs = Date.now() - new Date(record.activatedAt || record.timestamp).getTime();
   const elapsedHours = elapsedMs / (1000 * 60 * 60);
   const roundedHours = Math.max(0.25, Math.ceil(elapsedHours * 4) / 4);
   const rate = record.hourlyRate || HOURLY_RATE[record.seatType] || 25;

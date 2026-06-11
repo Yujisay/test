@@ -201,8 +201,9 @@
   function getActiveTimerHtml(row) {
     if (row.status !== "ACTIVE") return '<span class="text-brand-neutral dark:text-[#a0a88e]">\u2014</span>';
     if (isOpenTimeSession(row)) {
+      const activatedTs = row.activatedAt || row.timestamp;
       return `<span class="admin-session-timer font-mono font-bold text-amber-600 dark:text-amber-400"
-      data-mode="elapsed" data-timestamp="${row.timestamp}">${formatElapsed(Date.now() - new Date(row.timestamp).getTime())}</span>
+      data-mode="elapsed" data-timestamp="${activatedTs}">${formatElapsed(Date.now() - new Date(activatedTs).getTime())}</span>
       <span class="block text-[9px] text-brand-neutral dark:text-[#a0a88e] mt-0.5">elapsed</span>`;
     }
     if (!row.endTime) {
@@ -437,7 +438,8 @@
     const updateData = {
       status: "ACTIVE",
       startTime,
-      bookingDate: today
+      bookingDate: today,
+      activatedAt: now.toISOString()
     };
     if (record.duration && record.duration !== "Open Time") {
       const hours = parseDurationHours(record.duration);
