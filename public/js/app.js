@@ -702,7 +702,7 @@
         <span id="sessionElapsed" class="text-2xl font-extrabold font-['Outfit'] text-amber-700 block digital-clock">0m 00s</span>
         <span class="text-[10px] text-amber-600 mt-1 block">Billing at \u20B1${rate}/hr \u2014 15-min increments</span>
       </div>
-      <button data-ref="${sessionKey(record)}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
+      <button data-ref="${sessionKey(record)}" data-ref-number="${record.referenceNumber}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
         <i data-lucide="timer-off" class="w-4 h-4"></i>
         Stop My Session
       </button>`;
@@ -712,9 +712,23 @@
         <span class="text-[10px] text-rose-600 uppercase font-bold block mb-1">Session Ended</span>
         <span class="text-sm font-semibold text-rose-700">Your time is up.</span>
       </div>
-      <button data-ref="${sessionKey(record)}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
+      <button data-ref="${sessionKey(record)}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/30 text-brand-primary flex items-center justify-center gap-2 transition-all">
         <i data-lucide="clock-arrow-up" class="w-4 h-4"></i>
         Extend &amp; Continue
+      </button>
+      <button data-ref="${sessionKey(record)}" class="btn-rebook-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
+        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        Re-book This Session
+      </button>`;
+    } else if (isExpired && isOpenTime) {
+      timerSection = `
+      <div class="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-center">
+        <span class="text-[10px] text-rose-600 uppercase font-bold block mb-1">Session Ended</span>
+        <span class="text-sm font-semibold text-rose-700">Your open time session has ended.</span>
+      </div>
+      <button data-ref="${sessionKey(record)}" class="btn-rebook-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
+        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        Re-book This Session
       </button>`;
     } else {
       timerSection = `
@@ -754,8 +768,9 @@
     if (window.lucide) lucide.createIcons();
     if (isActive && !isOpenTime && record.endTime) {
       setTimeout(() => startCountdown(record.endTime, record.bookingDate), 50);
-    } else if (isActive && isOpenTime && record.timestamp) {
-      setTimeout(() => startElapsedTimer(record.timestamp), 50);
+    } else if (isActive && isOpenTime) {
+      const timerStart = record.activatedAt || record.timestamp;
+      if (timerStart) setTimeout(() => startElapsedTimer(timerStart), 50);
     }
   }
   function renderNoRecordFound(name) {
@@ -866,6 +881,34 @@ Amount: \u20B1${cost.toFixed(2)}`);
       hideLoader();
       console.error("Online extend payment error:", err);
       alert("Payment link creation failed. Please pay at the cashier instead.");
+    }
+  }
+  async function reactivateSession(key) {
+    const db2 = getDb();
+    if (!db2) return;
+    showLoader("Processing...", "Re-activating your session...");
+    try {
+      const snapshot = await db2.ref("sessions/" + key).once("value");
+      const record = snapshot.val();
+      if (!record) { hideLoader(); return; }
+      const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+      const baseDuration = record.duration.replace(/\s*\(.*?\)\s*$/, "").replace(/\s*\+\d+(\.\d+)?(hr|min)\s*$/i, "").trim();
+      const updateData = {
+        status: "PENDING SESSION",
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        bookingDate: today,
+        startTime: "",
+        endTime: "",
+        activatedAt: null,
+        duration: baseDuration
+      };
+      await db2.ref("sessions/" + key).update(updateData);
+      hideLoader();
+      showTicketModal({ ...record, ...updateData });
+    } catch (err) {
+      hideLoader();
+      console.error("Re-activation error:", err);
+      alert("Failed to re-activate session. Please try again.");
     }
   }
   async function stopOpenTimeSession(refNum) {
@@ -1129,9 +1172,22 @@ Please proceed to the cashier desk to complete your payment.`);
     if (id === "btnExtendPayCash") confirmExtendCash();
     if (id === "btnExtendPayOnline") confirmExtendOnline();
     if (target.classList.contains("btn-customer-stop-session")) {
-      const refNum = target.getAttribute("data-ref");
-      if (refNum && state.dbConnected) stopOpenTimeSession(refNum);
-      else if (!state.dbConnected) alert("Cannot stop session while database is disconnected.");
+      const key = target.getAttribute("data-ref");
+      const expectedRef = target.getAttribute("data-ref-number") || "";
+      if (!state.dbConnected) { alert("Cannot stop session while database is disconnected."); return; }
+      if (!key) return;
+      const entered = prompt("Enter your Reference Number to confirm ending your session:");
+      if (entered === null) return;
+      if (entered.trim().toUpperCase() !== expectedRef.toUpperCase()) {
+        alert("Incorrect reference number. Only the session owner can end this session.");
+        return;
+      }
+      stopOpenTimeSession(key);
+    }
+    if (target.classList.contains("btn-rebook-session")) {
+      const key = target.getAttribute("data-ref");
+      if (!state.dbConnected) { alert("Cannot re-book while database is disconnected."); return; }
+      if (key) reactivateSession(key);
     }
     if (id === "btnCancelStop") {
       document.getElementById("stopSessionModal").classList.add("hidden");

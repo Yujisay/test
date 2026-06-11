@@ -359,7 +359,8 @@
     const updateData = {
       status: "ACTIVE",
       startTime,
-      bookingDate: today
+      bookingDate: today,
+      activatedAt: now.toISOString()
     };
     if (record.duration && record.duration !== "Open Time") {
       const hours = parseDurationHours(record.duration);
