@@ -2,6 +2,7 @@ console.log("Study Hub Portal loading...");
 
 import { initFirebase, getDb } from './firebase';
 import { state } from './state';
+import { startAutoExpireWatcher } from './auto-expire';
 import { switchTab, updateConnectionStatus, closeTicketModal, downloadReceipt } from './ui';
 import {
   onDurationChange, updateFormPreview,
@@ -23,6 +24,8 @@ function init(): void {
     if (window.lucide) lucide.createIcons();
 
     if (db) {
+      startAutoExpireWatcher();
+
       db.ref(".info/connected").on("value", (snap: any) => {
         const connected = snap.val() === true;
         state.dbConnected = connected;

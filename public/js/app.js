@@ -90,6 +90,85 @@
     dbConnected: false
   };
 
+  // src/auto-expire.ts
+  init_firebase();
+  var expireTimers = {};
+  function parseEndTime(timeStr, bookingDate) {
+    let base;
+    if (bookingDate) {
+      base = /* @__PURE__ */ new Date(bookingDate + "T00:00:00");
+      if (isNaN(base.getTime())) base = /* @__PURE__ */ new Date();
+    } else {
+      base = /* @__PURE__ */ new Date();
+    }
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return base;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const period = match[3].toUpperCase();
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
+  }
+  async function markExpired(key, record) {
+    const db2 = getDb();
+    if (!db2) return;
+    try {
+      const snap = await db2.ref("sessions/" + key + "/status").once("value");
+      if (snap.val() !== "ACTIVE") return;
+      await db2.ref("sessions/" + key).update({ status: "EXPIRED" });
+      console.log(
+        `[AutoExpire] ${record.referenceNumber} (${record.fullName}) \u2192 EXPIRED`
+      );
+    } catch (e) {
+      console.warn("[AutoExpire] Failed to expire", key, e);
+    }
+  }
+  function scheduleExpiry(key, record) {
+    if (expireTimers[key]) {
+      clearTimeout(expireTimers[key]);
+      delete expireTimers[key];
+    }
+    if (!record.endTime) return;
+    const isOpenTime = record.duration === "Open Time" || record.duration.startsWith("Open Time");
+    if (isOpenTime) return;
+    const endDate = parseEndTime(record.endTime, record.bookingDate);
+    const remaining = endDate.getTime() - Date.now();
+    if (remaining <= 0) {
+      markExpired(key, record);
+    } else {
+      expireTimers[key] = setTimeout(() => {
+        delete expireTimers[key];
+        markExpired(key, record);
+      }, remaining);
+      console.log(
+        `[AutoExpire] ${record.referenceNumber} scheduled to expire in ${Math.round(remaining / 1e3)}s`
+      );
+    }
+  }
+  function clearAllTimers() {
+    Object.keys(expireTimers).forEach((k) => {
+      clearTimeout(expireTimers[k]);
+      delete expireTimers[k];
+    });
+  }
+  function startAutoExpireWatcher() {
+    const db2 = getDb();
+    if (!db2) {
+      console.warn("[AutoExpire] No database \u2014 watcher not started.");
+      return;
+    }
+    db2.ref("sessions").orderByChild("status").equalTo("ACTIVE").on("value", (snapshot) => {
+      clearAllTimers();
+      if (!snapshot.exists()) return;
+      const sessions = snapshot.val();
+      Object.entries(sessions).forEach(([key, record]) => {
+        scheduleExpiry(key, record);
+      });
+    });
+    console.log("[AutoExpire] Watcher started \u2014 monitoring all active sessions.");
+  }
+
   // src/ui.ts
   init_config();
   var currentTicketRecord = null;
@@ -514,18 +593,6 @@
   var currentViewingRecord = null;
   var stopSessionData = null;
   var extendData = null;
-  var currentSessionRef = null;
-  var currentSessionListener = null;
-  var currentSearchMatches = [];
-  var currentSearchDb = null;
-  var currentExpandedKey = null;
-  function detachSessionListener() {
-    if (currentSessionRef && currentSessionListener) {
-      currentSessionRef.off("value", currentSessionListener);
-      currentSessionRef = null;
-      currentSessionListener = null;
-    }
-  }
   function clearCountdown() {
     if (countdownInterval !== null) {
       clearInterval(countdownInterval);
@@ -619,11 +686,9 @@
   }
   async function checkSessionStatus() {
     clearCountdown();
-    detachSessionListener();
-    currentExpandedKey = null;
     const db2 = getDb();
-    const query = document.getElementById("searchName").value.trim();
-    if (!query || !db2) return;
+    const name = document.getElementById("searchName").value.trim();
+    if (!name || !db2) return;
     const resultsDiv = document.getElementById("checkResultContainer");
     const emptyState = document.getElementById("checkEmptyState");
     emptyState.classList.add("hidden");
@@ -631,91 +696,23 @@
     resultsDiv.innerHTML = `<div class="p-12 text-center"><i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto text-brand-primary"></i></div>`;
     if (window.lucide) lucide.createIcons();
     try {
-      const snapshot = await db2.ref("sessions").once("value");
+      const snapshot = await db2.ref("sessions").orderByChild("fullName").equalTo(name).once("value");
       if (snapshot.exists()) {
-        const allRecords = Object.values(snapshot.val());
-        const q = query.toLowerCase();
-        const matches = allRecords.filter((r) => {
-          return (r.fullName && r.fullName.toLowerCase().includes(q)) || (r.referenceNumber && r.referenceNumber.toLowerCase().includes(q));
-        });
-        if (matches.length > 0) {
-          matches.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-          renderSearchResultsList(matches, db2);
-        } else {
-          renderNoRecordFound(query);
-        }
+        const records = Object.values(snapshot.val());
+        records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        renderSessionCard(records[0]);
       } else {
-        renderNoRecordFound(query);
+        renderNoRecordFound(name);
       }
     } catch (error) {
       console.error("Query Error:", error);
-      renderNoRecordFound(query + " (Error)");
+      renderNoRecordFound(name + " (Error)");
     }
   }
-  function attachListenerForRecord(record, db2, containerEl) {
-    if (!db2) return;
-    const key = sessionKey(record);
-    currentSessionRef = db2.ref("sessions/" + key);
-    currentSessionListener = function(snap) {
-      if (!snap.exists()) return;
-      const updated = snap.val();
-      if (currentViewingRecord && updated.status !== currentViewingRecord.status) {
-        clearCountdown();
-        const idx = currentSearchMatches.findIndex((r) => sessionKey(r) === key);
-        if (idx !== -1) currentSearchMatches[idx] = updated;
-        if (containerEl) {
-          renderSessionCard(updated, containerEl);
-        } else {
-          renderSessionCard(updated);
-        }
-      }
-    };
-    currentSessionRef.on("value", currentSessionListener);
-  }
-  function renderSearchResultsList(matches, db2) {
-    currentSearchMatches = matches;
-    currentSearchDb = db2;
-    currentExpandedKey = null;
-    if (matches.length === 1) {
-      renderSessionCard(matches[0]);
-      attachListenerForRecord(matches[0], db2, null);
-      return;
-    }
-    const resultsDiv = document.getElementById("checkResultContainer");
-    const listHtml = matches.map((r) => {
-      const key = sessionKey(r);
-      const sc = r.status === "ACTIVE" ? "text-emerald-700 bg-emerald-50 border-emerald-200" : r.status === "PENDING SESSION" ? "text-amber-700 bg-amber-50 border-amber-200" : r.status === "AWAITING PAYMENT" ? "text-blue-700 bg-blue-50 border-blue-200" : "text-brand-neutral bg-brand-light border-brand-border";
-      return `
-        <div class="session-result-item bg-brand-surface border border-brand-border rounded-2xl overflow-hidden shadow-soft" data-key="${key}">
-          <button class="session-result-toggle w-full px-4 py-3 flex items-center justify-between gap-3 hover:bg-brand-light transition-all" data-key="${key}">
-            <div class="flex items-center gap-3 min-w-0">
-              <span class="font-mono font-bold text-brand-primary text-sm shrink-0">${r.referenceNumber}</span>
-              <div class="min-w-0 text-left">
-                <span class="font-semibold text-sm text-brand-dark block truncate">${r.fullName}</span>
-                <span class="text-[10px] text-brand-neutral">${r.seatType} \u00b7 ${r.bookingDate}</span>
-              </div>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-lg border ${sc}">${r.status}</span>
-              <i data-lucide="chevron-down" class="result-chevron w-4 h-4 text-brand-neutral" style="transition:transform 0.2s"></i>
-            </div>
-          </button>
-          <div class="session-result-detail hidden px-2 pb-3"></div>
-        </div>`;
-    }).join("");
-    resultsDiv.innerHTML = `
-      <div class="space-y-2 animate-fade-in">
-        <p class="text-[11px] text-brand-neutral mb-1 px-1">${matches.length} sessions found \u2014 tap one to expand</p>
-        ${listHtml}
-        <button id="btnClearSearch" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Search Again</button>
-      </div>`;
-    if (window.lucide) lucide.createIcons();
-  }
-  function renderSessionCard(record, containerEl) {
+  function renderSessionCard(record) {
     currentViewingRecord = record;
     autoExpireHandled = false;
-    const resultsDiv = containerEl || document.getElementById("checkResultContainer");
-    const inList = !!containerEl;
+    const resultsDiv = document.getElementById("checkResultContainer");
     const statusColor = record.status === "ACTIVE" ? "text-emerald-600 bg-emerald-50 border-emerald-200" : record.status === "PENDING SESSION" ? "text-amber-600 bg-amber-50 border-amber-200" : "text-brand-neutral bg-brand-light border-brand-border";
     const isOpenTime = record.duration === "Open Time" || record.duration.startsWith("Open Time");
     const isActive = record.status === "ACTIVE";
@@ -754,7 +751,7 @@
         <span id="sessionElapsed" class="text-2xl font-extrabold font-['Outfit'] text-amber-700 block digital-clock">0m 00s</span>
         <span class="text-[10px] text-amber-600 mt-1 block">Billing at \u20B1${rate}/hr \u2014 15-min increments</span>
       </div>
-      <button data-ref="${sessionKey(record)}" data-ref-number="${record.referenceNumber}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
+      <button data-ref="${sessionKey(record)}" class="btn-customer-stop-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-2 transition-all">
         <i data-lucide="timer-off" class="w-4 h-4"></i>
         Stop My Session
       </button>`;
@@ -764,23 +761,9 @@
         <span class="text-[10px] text-rose-600 uppercase font-bold block mb-1">Session Ended</span>
         <span class="text-sm font-semibold text-rose-700">Your time is up.</span>
       </div>
-      <button data-ref="${sessionKey(record)}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/30 text-brand-primary flex items-center justify-center gap-2 transition-all">
+      <button data-ref="${sessionKey(record)}" class="btn-extend-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
         <i data-lucide="clock-arrow-up" class="w-4 h-4"></i>
         Extend &amp; Continue
-      </button>
-      <button data-ref="${sessionKey(record)}" class="btn-rebook-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
-        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
-        Re-book This Session
-      </button>`;
-    } else if (isExpired && isOpenTime) {
-      timerSection = `
-      <div class="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-center">
-        <span class="text-[10px] text-rose-600 uppercase font-bold block mb-1">Session Ended</span>
-        <span class="text-sm font-semibold text-rose-700">Your open time session has ended.</span>
-      </div>
-      <button data-ref="${sessionKey(record)}" class="btn-rebook-session w-full py-3 px-4 rounded-xl text-sm font-bold bg-brand-primary hover:bg-brand-primary/90 text-white flex items-center justify-center gap-2 transition-all">
-        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
-        Re-book This Session
       </button>`;
     } else {
       timerSection = `
@@ -814,15 +797,14 @@
         </div>
       </div>
       ${timerSection}
-      ${!inList ? `<button id="btnClearSearch" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Search Again</button>` : ""}
+      <button id="btnClearSearch" class="w-full py-3 px-4 rounded-xl text-xs font-bold bg-brand-light border border-brand-border hover:bg-brand-secondary/20 text-brand-dark transition-all">Search Again</button>
     </div>
   `;
     if (window.lucide) lucide.createIcons();
     if (isActive && !isOpenTime && record.endTime) {
       setTimeout(() => startCountdown(record.endTime, record.bookingDate), 50);
-    } else if (isActive && isOpenTime) {
-      const timerStart = record.activatedAt || record.timestamp;
-      if (timerStart) setTimeout(() => startElapsedTimer(timerStart), 50);
+    } else if (isActive && isOpenTime && record.timestamp) {
+      setTimeout(() => startElapsedTimer(record.timestamp), 50);
     }
   }
   function renderNoRecordFound(name) {
@@ -843,11 +825,7 @@
   }
   function clearSearchLookup() {
     clearCountdown();
-    detachSessionListener();
     currentViewingRecord = null;
-    currentSearchMatches = [];
-    currentSearchDb = null;
-    currentExpandedKey = null;
     document.getElementById("searchName").value = "";
     document.getElementById("checkResultContainer").classList.add("hidden");
     document.getElementById("checkEmptyState").classList.remove("hidden");
@@ -938,34 +916,6 @@ Amount: \u20B1${cost.toFixed(2)}`);
       alert("Payment link creation failed. Please pay at the cashier instead.");
     }
   }
-  async function reactivateSession(key) {
-    const db2 = getDb();
-    if (!db2) return;
-    showLoader("Processing...", "Re-activating your session...");
-    try {
-      const snapshot = await db2.ref("sessions/" + key).once("value");
-      const record = snapshot.val();
-      if (!record) { hideLoader(); return; }
-      const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-      const baseDuration = record.duration.replace(/\s*\(.*?\)\s*$/, "").replace(/\s*\+\d+(\.\d+)?(hr|min)\s*$/i, "").trim();
-      const updateData = {
-        status: "PENDING SESSION",
-        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-        bookingDate: today,
-        startTime: "",
-        endTime: "",
-        activatedAt: null,
-        duration: baseDuration
-      };
-      await db2.ref("sessions/" + key).update(updateData);
-      hideLoader();
-      showTicketModal({ ...record, ...updateData });
-    } catch (err) {
-      hideLoader();
-      console.error("Re-activation error:", err);
-      alert("Failed to re-activate session. Please try again.");
-    }
-  }
   async function stopOpenTimeSession(refNum) {
     const db2 = getDb();
     if (!db2) return;
@@ -992,7 +942,7 @@ Amount: \u20B1${cost.toFixed(2)}`);
   }
   async function confirmStopCash() {
     if (!stopSessionData) return;
-    const { refNum, record, finalAmount, timeLabel } = stopSessionData;
+    const { refNum, finalAmount, timeLabel } = stopSessionData;
     const db2 = getDb();
     if (!db2) return;
     try {
@@ -1006,14 +956,14 @@ Amount: \u20B1${cost.toFixed(2)}`);
       });
       hideLoader();
       document.getElementById("stopSessionModal").classList.add("hidden");
+      stopSessionData = null;
       alert(`Session stopped.
 
-Ref#: ${record.referenceNumber}
+Ref#: ${stopSessionData.record.referenceNumber}
 Time Used: ${timeLabel}
 Amount Due: \u20B1${finalAmount.toFixed(2)}
 
 Please proceed to the cashier desk to complete your payment.`);
-      stopSessionData = null;
       clearSearchLookup();
     } catch (err) {
       hideLoader();
@@ -1070,6 +1020,7 @@ Please proceed to the cashier desk to complete your payment.`);
       const db2 = initFirebase();
       if (window.lucide) lucide.createIcons();
       if (db2) {
+        startAutoExpireWatcher();
         db2.ref(".info/connected").on("value", (snap) => {
           const connected = snap.val() === true;
           state.dbConnected = connected;
@@ -1205,38 +1156,6 @@ Please proceed to the cashier desk to complete your payment.`);
       else alert("Cannot search while database is disconnected.");
     }
     if (id === "btnClearSearch" || id === "btnRetrySearch") clearSearchLookup();
-    if (target.classList.contains("session-result-toggle")) {
-      const key = target.getAttribute("data-key");
-      if (!key) return;
-      const isSameKey = currentExpandedKey === key;
-      if (currentExpandedKey) {
-        const prevItem = document.querySelector(`.session-result-item[data-key="${currentExpandedKey}"]`);
-        if (prevItem) {
-          const prevDetail = prevItem.querySelector(".session-result-detail");
-          prevDetail.classList.add("hidden");
-          prevDetail.innerHTML = "";
-          const prevChev = prevItem.querySelector(".result-chevron");
-          if (prevChev) prevChev.style.transform = "";
-        }
-        clearCountdown();
-        detachSessionListener();
-        currentViewingRecord = null;
-        currentExpandedKey = null;
-      }
-      if (isSameKey) return;
-      const record = currentSearchMatches.find((r) => sessionKey(r) === key);
-      if (!record) return;
-      const item = document.querySelector(`.session-result-item[data-key="${key}"]`);
-      if (!item) return;
-      const detailEl = item.querySelector(".session-result-detail");
-      detailEl.classList.remove("hidden");
-      const chev = item.querySelector(".result-chevron");
-      if (chev) chev.style.transform = "rotate(180deg)";
-      currentExpandedKey = key;
-      renderSessionCard(record, detailEl);
-      attachListenerForRecord(record, currentSearchDb, detailEl);
-      return;
-    }
     if (id === "btnCloseTicket" || id === "btnDoneTicket") closeTicketModal();
     if (id === "btnDownloadReceipt") {
       e.stopPropagation();
@@ -1259,22 +1178,9 @@ Please proceed to the cashier desk to complete your payment.`);
     if (id === "btnExtendPayCash") confirmExtendCash();
     if (id === "btnExtendPayOnline") confirmExtendOnline();
     if (target.classList.contains("btn-customer-stop-session")) {
-      const key = target.getAttribute("data-ref");
-      const expectedRef = target.getAttribute("data-ref-number") || "";
-      if (!state.dbConnected) { alert("Cannot stop session while database is disconnected."); return; }
-      if (!key) return;
-      const entered = prompt("Enter your Reference Number to confirm ending your session:");
-      if (entered === null) return;
-      if (entered.trim().toUpperCase() !== expectedRef.toUpperCase()) {
-        alert("Incorrect reference number. Only the session owner can end this session.");
-        return;
-      }
-      stopOpenTimeSession(key);
-    }
-    if (target.classList.contains("btn-rebook-session")) {
-      const key = target.getAttribute("data-ref");
-      if (!state.dbConnected) { alert("Cannot re-book while database is disconnected."); return; }
-      if (key) reactivateSession(key);
+      const refNum = target.getAttribute("data-ref");
+      if (refNum && state.dbConnected) stopOpenTimeSession(refNum);
+      else if (!state.dbConnected) alert("Cannot stop session while database is disconnected.");
     }
     if (id === "btnCancelStop") {
       document.getElementById("stopSessionModal").classList.add("hidden");

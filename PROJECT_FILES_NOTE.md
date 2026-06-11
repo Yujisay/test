@@ -28,6 +28,7 @@
 | `firebase.ts` | 26 | Firebase init — initializes Firebase Realtime Database (compat mode), exposes `getDb()` and `sessionKey()` helpers. |
 | `types.ts` | 50 | TypeScript interfaces — `SessionRecord`, `AppState`, `AdminState`, `SessionTimes`. |
 | `globals.d.ts` | 2 | Global type declarations — `firebase` (any) and `lucide` (icon library) for browser globals. |
+| `auto-expire.ts` | ~100 | Background auto-expiry watcher — listens to all ACTIVE sessions in Firebase via `.on('value')`, schedules a `setTimeout` for each fixed-duration session, and writes `status: 'EXPIRED'` when the end time passes. Open-time sessions are excluded (stopped manually). Runs in both the customer portal and admin panel. |
 
 ---
 

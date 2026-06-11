@@ -69,6 +69,84 @@
     pageSize: PAGE_SIZE
   };
 
+  // src/auto-expire.ts
+  var expireTimers = {};
+  function parseEndTime(timeStr, bookingDate) {
+    let base;
+    if (bookingDate) {
+      base = /* @__PURE__ */ new Date(bookingDate + "T00:00:00");
+      if (isNaN(base.getTime())) base = /* @__PURE__ */ new Date();
+    } else {
+      base = /* @__PURE__ */ new Date();
+    }
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return base;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const period = match[3].toUpperCase();
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
+  }
+  async function markExpired(key, record) {
+    const db2 = getDb();
+    if (!db2) return;
+    try {
+      const snap = await db2.ref("sessions/" + key + "/status").once("value");
+      if (snap.val() !== "ACTIVE") return;
+      await db2.ref("sessions/" + key).update({ status: "EXPIRED" });
+      console.log(
+        `[AutoExpire] ${record.referenceNumber} (${record.fullName}) \u2192 EXPIRED`
+      );
+    } catch (e) {
+      console.warn("[AutoExpire] Failed to expire", key, e);
+    }
+  }
+  function scheduleExpiry(key, record) {
+    if (expireTimers[key]) {
+      clearTimeout(expireTimers[key]);
+      delete expireTimers[key];
+    }
+    if (!record.endTime) return;
+    const isOpenTime = record.duration === "Open Time" || record.duration.startsWith("Open Time");
+    if (isOpenTime) return;
+    const endDate = parseEndTime(record.endTime, record.bookingDate);
+    const remaining = endDate.getTime() - Date.now();
+    if (remaining <= 0) {
+      markExpired(key, record);
+    } else {
+      expireTimers[key] = setTimeout(() => {
+        delete expireTimers[key];
+        markExpired(key, record);
+      }, remaining);
+      console.log(
+        `[AutoExpire] ${record.referenceNumber} scheduled to expire in ${Math.round(remaining / 1e3)}s`
+      );
+    }
+  }
+  function clearAllTimers() {
+    Object.keys(expireTimers).forEach((k) => {
+      clearTimeout(expireTimers[k]);
+      delete expireTimers[k];
+    });
+  }
+  function startAutoExpireWatcher() {
+    const db2 = getDb();
+    if (!db2) {
+      console.warn("[AutoExpire] No database \u2014 watcher not started.");
+      return;
+    }
+    db2.ref("sessions").orderByChild("status").equalTo("ACTIVE").on("value", (snapshot) => {
+      clearAllTimers();
+      if (!snapshot.exists()) return;
+      const sessions = snapshot.val();
+      Object.entries(sessions).forEach(([key, record]) => {
+        scheduleExpiry(key, record);
+      });
+    });
+    console.log("[AutoExpire] Watcher started \u2014 monitoring all active sessions.");
+  }
+
   // src/ui.ts
   function showLoader(title, msg) {
     document.getElementById("loadingTitle").innerText = title;
@@ -359,8 +437,7 @@
     const updateData = {
       status: "ACTIVE",
       startTime,
-      bookingDate: today,
-      activatedAt: now.toISOString()
+      bookingDate: today
     };
     if (record.duration && record.duration !== "Open Time") {
       const hours = parseDurationHours(record.duration);
@@ -1099,6 +1176,7 @@ New total: \u20B1${newAmount.toFixed(2)}`
     const db2 = initFirebase();
     if (window.lucide) lucide.createIcons();
     if (db2) {
+      startAutoExpireWatcher();
       db2.ref(".info/connected").on("value", (snap) => {
         state.dbConnected = snap.val() === true;
       });

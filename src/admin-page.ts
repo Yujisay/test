@@ -1,5 +1,6 @@
 import { initFirebase, getDb } from './firebase';
 import { state, adminState } from './state';
+import { startAutoExpireWatcher } from './auto-expire';
 import { ADMIN_PASSCODE, getPageSize } from './config';
 import { showLoader, hideLoader } from './ui';
 import {
@@ -373,6 +374,8 @@ async function init(): Promise<void> {
   if (window.lucide) lucide.createIcons();
 
   if (db) {
+    startAutoExpireWatcher();
+
     db.ref('.info/connected').on('value', (snap: any) => {
       state.dbConnected = snap.val() === true;
     });
